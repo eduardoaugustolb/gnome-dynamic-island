@@ -1,0 +1,177 @@
+import St from 'gi://St';
+import Meta from 'gi://Meta';
+import Shell from 'gi://Shell';
+import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+
+import {Island} from './island.js';
+
+const TOP_GAP = 8;
+
+export default class DynamicIslandExtension extends Extension {
+    enable() {
+        this._settings = this.getSettings();
+
+        this._island = new Island(this);
+        Main.layoutManager.addTopChrome(this._island, {
+            trackFullscreen: true,
+            affectsStruts: false,
+        });
+        // Só agora a ilha está no stage; a sondagem de cores do tema
+        // (get_theme_node) precisa disso para funcionar.
+        this._island.refreshTheme();
+
+        this._strut = new St.Widget({
+            name: 'dynamicIslandStrut',
+            reactive: false,
+            opacity: 0,
+        });
+        Main.layoutManager.addChrome(this._strut, {
+            affectsStruts: true,
+            trackFullscreen: true,
+        });
+
+        this._allocationId = this._island.connect('notify::allocation',
+            () => this._position());
+        this._monitorsId = Main.layoutManager.connect('monitors-changed',
+            () => this._position());
+        this._settingsId = this._settings.connect('changed',
+            (_s, key) => {
+                if (key === 'hide-top-bar')
+                    this._applyTopBar();
+                else if (key === 'position')
+                    this._position();
+                else if (key === 'collapsed-height')
+                    this._updateStrut();
+            });
+
+        // Atalho global e exclusivo da extensão pra play/pause, em vez de
+        // depender do foco de teclado do botão (que brigava com o
+        // atalho nativo de Espaço do Spotify/YouTube/etc.).
+        Main.wm.addKeybinding(
+            'media-playpause-keybinding',
+            this._settings,
+            Meta.KeyBindingFlags.NONE,
+            Shell.ActionMode.ALL,
+            () => this._island?.toggleMediaPlayPause());
+
+        this._applyTopBar();
+        this._island.start();
+        this._updateStrut();
+        this._position();
+    }
+
+    _updateStrut() {
+        if (!this._strut)
+            return;
+        const monitor = Main.layoutManager.primaryMonitor;
+        if (!monitor)
+            return;
+        // Só reservamos espaço próprio quando a barra nativa está
+        // escondida; caso contrário ela já reserva a área.
+        const h = this._topBarHidden
+            ? this._settings.get_int('collapsed-height') + TOP_GAP * 2
+            : 0;
+        this._strut.set_position(monitor.x, monitor.y);
+        this._strut.set_size(monitor.width, h);
+    }
+
+    _applyTopBar() {
+        if (this._settings.get_boolean('hide-top-bar')) {
+            this._hideTopBar();
+        } else {
+            this._showTopBar();
+        }
+    }
+
+    _hideTopBar() {
+        if (this._topBarHidden)
+            return;
+        this._topBarHidden = true;
+
+        const panelBox = Main.layoutManager.panelBox;
+        try {
+            Main.layoutManager.removeChrome(panelBox);
+            Main.layoutManager.addChrome(panelBox, {
+                affectsStruts: false,
+                trackFullscreen: false,
+            });
+        } catch (e) {
+            logError(e, 'dynamic-island:hideTopBar');
+        }
+        panelBox.hide();
+        try {
+            Main.messageTray._bannerBin?.hide?.();
+        } catch (_) {}
+        this._updateStrut();
+    }
+
+    _showTopBar() {
+        if (!this._topBarHidden)
+            return;
+        this._topBarHidden = false;
+
+        const panelBox = Main.layoutManager.panelBox;
+        try {
+            Main.messageTray._bannerBin?.show?.();
+        } catch (_) {}
+        try {
+            panelBox.show();
+            Main.layoutManager.removeChrome(panelBox);
+            Main.layoutManager.addChrome(panelBox, {
+                affectsStruts: true,
+                trackFullscreen: true,
+            });
+        } catch (e) {
+            logError(e, 'dynamic-island:showTopBar');
+        }
+    }
+
+    _position() {
+        if (!this._island)
+            return;
+        const monitor = Main.layoutManager.primaryMonitor;
+        if (!monitor)
+            return;
+        const w = this._island.width;
+        const h = this._island.height;
+        const pos = this._settings.get_string('position');
+        let x;
+        if (pos === 'left')
+            x = monitor.x + TOP_GAP;
+        else if (pos === 'right')
+            x = monitor.x + monitor.width - w - TOP_GAP;
+        else
+            x = monitor.x + Math.floor((monitor.width - w) / 2);
+        const y = monitor.y + TOP_GAP;
+        if (this._island.x !== x || this._island.y !== y)
+            this._island.set_position(x, y);
+    }
+
+    disable() {
+        Main.wm.removeKeybinding('media-playpause-keybinding');
+        if (this._allocationId) {
+            this._island?.disconnect(this._allocationId);
+            this._allocationId = 0;
+        }
+        if (this._monitorsId) {
+            Main.layoutManager.disconnect(this._monitorsId);
+            this._monitorsId = 0;
+        }
+        if (this._settingsId) {
+            this._settings?.disconnect(this._settingsId);
+            this._settingsId = 0;
+        }
+        if (this._island) {
+            this._island.destroy();
+            this._island = null;
+        }
+        if (this._strut) {
+            Main.layoutManager.removeChrome(this._strut);
+            this._strut.destroy();
+            this._strut = null;
+        }
+        this._showTopBar();
+        this._settings = null;
+    }
+}

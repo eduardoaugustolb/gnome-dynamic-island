@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="dynamic-island">
+  <schema id="org.gnome.shell.extensions.dynamic-island"
+          path="/org/gnome/shell/extensions/dynamic-island/">
+
+    <key name="position" type="s">
+      <default>'center'</default>
+      <summary>Posição da ilha na tela</summary>
+      <description>Onde a ilha fica ancorada na borda superior: 'center', 'left' ou 'right'.</description>
+    </key>
+
+    <key name="expanded-width" type="i">
+      <default>420</default>
+      <range min="280" max="900"/>
+      <summary>Largura da ilha expandida</summary>
+      <description>Largura em pixels da ilha quando expandida.</description>
+    </key>
+
+    <key name="collapsed-height" type="i">
+      <default>34</default>
+      <range min="28" max="96"/>
+      <summary>Altura da pill recolhida</summary>
+      <description>Altura em pixels da ilha no estado recolhido.</description>
+    </key>
+
+    <key name="corner-radius" type="i">
+      <default>34</default>
+      <range min="10" max="80"/>
+      <summary>Raio dos cantos expandidos</summary>
+      <description>Raio dos cantos da ilha quando expandida.</description>
+    </key>
+
+    <key name="peek-duration" type="i">
+      <default>5000</default>
+      <range min="1500" max="30000"/>
+      <summary>Duração do peek de notificação</summary>
+      <description>Tempo em milissegundos que a ilha permanece expandida mostrando uma notificação antes de recolher.</description>
+    </key>
+
+    <key name="media-banner-duration" type="i">
+      <default>4500</default>
+      <range min="1500" max="30000"/>
+      <summary>Duração do banner de mídia</summary>
+      <description>Tempo em milissegundos que a ilha permanece expandida quando uma música começa a tocar.</description>
+    </key>
+
+    <key name="hide-top-bar" type="b">
+      <default>true</default>
+      <summary>Esconder a barra superior</summary>
+      <description>Esconde o painel superior do GNOME enquanto a extensão está ativa.</description>
+    </key>
+
+    <key name="animations" type="b">
+      <default>true</default>
+      <summary>Animações</summary>
+      <description>Habilita as animações suaves da ilha.</description>
+    </key>
+
+    <key name="show-notifications" type="b">
+      <default>true</default>
+      <summary>Notificações</summary>
+      <description>Mostra notificações na ilha (peek e lista no painel).</description>
+    </key>
+
+    <key name="show-media" type="b">
+      <default>true</default>
+      <summary>Mídia</summary>
+      <description>Mostra o player de mídia (MPRIS) na ilha.</description>
+    </key>
+
+    <key name="show-controls" type="b">
+      <default>true</default>
+      <summary>Controles rápidos</summary>
+      <description>Mostra volume, brilho e toggles no painel expandido.</description>
+    </key>
+
+    <key name="show-battery" type="b">
+      <default>true</default>
+      <summary>Bateria</summary>
+      <description>Mostra o indicador de bateria na pill.</description>
+    </key>
+
+    <key name="accent-color" type="s">
+      <default>'#0A84FF'</default>
+      <summary>Cor de destaque</summary>
+      <description>Cor usada para elementos de destaque (toggles ativos, controles de mídia).</description>
+    </key>
+
+    <key name="media-playpause-keybinding" type="as">
+      <default>['&lt;Super&gt;&lt;Shift&gt;space']</default>
+      <summary>Atalho de play/pause da mídia</summary>
+      <description>Atalho de teclado global e exclusivo da Dynamic Island para pausar/retomar a mídia, sem depender de foco de teclado (evita conflito com o atalho nativo de Espaço de players como o Spotify).</description>
+    </key>
+
+  </schema>
+</schemalist>

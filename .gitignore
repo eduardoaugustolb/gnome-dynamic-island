@@ -1,0 +1,12 @@
+# Ferramentas locais
+.claude/
+.idea/
+.vscode/
+
+# Artefatos do sistema / SO
+.DS_Store
+*.swp
+*~
+
+# Backup
+*.bak

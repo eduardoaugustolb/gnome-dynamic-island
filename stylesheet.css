@@ -1,0 +1,706 @@
+/* ====================================================================
+ * Dynamic Island — Apple-style dark glass
+ *
+ * O St do GNOME Shell não suporta variáveis CSS nem tokens como os de
+ * um navegador, então o "sistema de tokens" abaixo é DOCUMENTAL: os
+ * valores neste arquivo obedecem a uma escala única, mantida aqui no
+ * topo. Ao mudar um valor, mude por padrão o valor correspondente nas
+ * regras (não introduza números fora da escala).
+ *
+ * Escala de espaçamento:  4 / 8 / 12 / 16 / 20 / 24 px
+ * Escala de raios:        999 (full) · 34 (painel) · 18 (cards)
+ *                         14 (toggles/linhas) · 10 (ícones) px
+ * Tipografia:             13 (primária) · 12 (secundária)
+ *                         11 (títulos de seção) · 10 (caption) px
+ * Contraste de texto:     0.96 (primário) · 0.68 (secundário)
+ *                         0.46 (terciário) · 0.32 (apagado)
+ *
+ * O contêiner raiz não desenha nada; cada camada tem o próprio visual.
+ * ==================================================================== */
+
+.dynamic-island {
+    background-color: transparent;
+}
+
+/* ==================== Pill recolhida ==================== */
+
+/* Cor de fundo "chapada": quando a sondagem do tema (JS) funciona, ela
+ * sobrescreve isso via style inline com a cor real do tema Shell/GTK
+ * (respeitando temas AMOLED pretos, por exemplo). Isto é só o
+ * fallback caso a sondagem falhe. */
+.island-pill {
+    background-color: rgba(20, 20, 22, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-top-color: rgba(255, 255, 255, 0.22);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+    padding: 0 16px;
+}
+
+.island-pill:hover {
+    background-color: rgba(32, 32, 34, 0.95);
+}
+
+/* Na pill: [esquerda = data ou ícone] [horário/título] [direita =
+ * bateria ou controles]. O espaçamento ENTRE os três blocos é o mesmo
+ * (.island-pill-content); o espaçamento DENTRO do indicador de bateria
+ * (ícone↔percentual) é bem menor — são partes do mesmo componente,
+ * não elementos separados. */
+.island-pill-content {
+    spacing: 8px;
+}
+
+.island-pill-side {
+    spacing: 8px;
+}
+
+.island-battery-group {
+    spacing: 4px;
+}
+
+.island-pill-icon {
+    color: rgba(255, 255, 255, 0.9);
+    icon-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Horário, data e bateria da pill compartilham o mesmo tamanho — a
+ * hierarquia visual vem só do peso/opacidade, não do tamanho da fonte.
+ * Sem max-width fixo: o JS limita a largura da pill à tela e o título
+ * elipsiza sozinho (ver _measurePillWidth). */
+.island-clock {
+    font-size: 13px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.96);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.island-pill-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.96);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.island-pill-date,
+.island-pill-battery {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.68);
+}
+
+.island-pill-control {
+    padding: 6px;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.island-pill-control:hover {
+    background-color: rgba(255, 255, 255, 0.18);
+}
+
+/* ==================== Banner (peek) ==================== */
+
+.island-banner {
+    background-color: rgba(18, 18, 20, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-top-color: rgba(255, 255, 255, 0.24);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.island-banner-inner {
+    spacing: 12px;
+    padding: 12px 16px;
+}
+
+.island-banner-appicon {
+    border-radius: 10px;
+}
+
+.island-banner-art {
+    border-radius: 10px;
+}
+
+.island-banner-app {
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.46);
+}
+
+.island-banner-time {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.32);
+}
+
+.island-banner-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.96);
+}
+
+.island-banner-subtitle {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.68);
+}
+
+.island-banner-controls {
+    spacing: 4px;
+}
+
+/* Botões de mídia do banner e do player expandido: anterior/próxima
+ * compactos (ícone 18), play/pause maior (ícone 22 + classe própria)
+ * para hierarquia de um toque só — ver _makeIconButton/island-play-button
+ * no island.js. */
+.island-banner-controls .island-icon-button,
+.island-media-controls .island-icon-button {
+    padding: 8px;
+}
+
+.island-banner-controls .island-play-button,
+.island-media-controls .island-play-button {
+    padding: 10px;
+}
+
+/* ==================== Painel ==================== */
+
+.island-panel {
+    background-color: rgba(18, 18, 20, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-top-color: rgba(255, 255, 255, 0.24);
+    box-shadow: 0 14px 48px rgba(0, 0, 0, 0.55);
+    padding: 16px;
+    spacing: 16px;
+}
+
+.island-header {
+    spacing: 12px;
+}
+
+.island-header-col {
+    spacing: 2px;
+}
+
+.island-header-time {
+    font-size: 26px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.96);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.island-header-date {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.island-content {
+    spacing: 16px;
+}
+
+/* ---------------- Páginas (carrossel horizontal) ---------------- */
+
+/* O viewport recorta o track: o que estiver fora da largura interna do
+ * painel fica escondido enquanto as páginas deslizam. Altura é definida
+ * pelo JS (_fitPages) — a maior página visível, limitada ao teto. */
+.island-pages-viewport {
+}
+
+/* Largura = PAGE_COUNT × viewport e posição em translateX são definidas
+ * pelo JS (_fitPages/_positionTrack); nada aqui. */
+.island-pages-track {
+}
+
+/* Cada página tem a largura exata do viewport (definida no JS); o
+ * padding horizontal vem do .island-panel. */
+.island-page {
+}
+
+/* Indicadores de página: uma bolinha clicável por página disponível. */
+.island-page-indicators {
+    spacing: 8px;
+}
+
+.island-page-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 4px;
+    padding: 0;
+    background-color: rgba(255, 255, 255, 0.22);
+}
+
+.island-page-dot:hover {
+    background-color: rgba(255, 255, 255, 0.42);
+}
+
+.island-page-dot:checked {
+    background-color: rgba(255, 255, 255, 0.9);
+    width: 18px;
+}
+
+.island-page-dot:checked:hover {
+    background-color: #ffffff;
+}
+
+/* Lista de notificações ocupa a página inteira (rolável); a altura é
+ * dada pela página, não por um teto fixo. */
+.island-notifs-page {
+    spacing: 8px;
+}
+
+/* Status "Tocando"/"Pausado" da página de mídia. */
+.island-media-status {
+    font-size: 10px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* Empty state da página de mídia (sem player ativo). */
+.island-media-empty {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.46);
+}
+
+/* Botão central de play/pause com destaque maior que os lados. */
+.island-play-button {
+    background-color: rgba(255, 255, 255, 0.14);
+    padding: 12px;
+}
+
+.island-card {
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    padding: 12px 16px;
+    spacing: 12px;
+}
+
+.island-media-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.96);
+}
+
+.island-media-artist {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.68);
+}
+
+.island-media-art {
+    border-radius: 10px;
+}
+
+.island-media-controls {
+    spacing: 8px;
+}
+
+/* ---------------- Seções ---------------- */
+
+.island-section {
+    spacing: 8px;
+}
+
+.island-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.46);
+    letter-spacing: 0.8px;
+}
+
+/* ---------------- Ações do sistema ---------------- */
+
+/* Células de ação (Bloquear/Suspender/Desligar): mesma geometria dos
+ * toggles, mas fundo mais neutro pra não parecer um estado contínuo. */
+.island-system-action {
+    background-color: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 12px 0;
+}
+
+.island-system-action:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.island-system-action .island-toggle-label {
+    color: rgba(255, 255, 255, 0.78);
+}
+
+/* "Desligar" é uma ação de alta consequência: ícone e label em tom de
+ * alerta pra não ser confundido com um toggle comum. */
+.island-power-action {
+    color: #ff6b5e;
+}
+
+.island-power-action .island-toggle-label {
+    color: #ff6b5e;
+}
+
+/* ---------------- Sliders ---------------- */
+
+.island-slider-row .slider {
+    -barlevel-height: 4px;
+    -barlevel-background-color: rgba(255, 255, 255, 0.18);
+    -barlevel-overdrive-color: #ff453a;
+    -barlevel-overdrive-separator-width: 1px;
+    -slider-handle-radius: 7px;
+    margin: 0 8px;
+    color: #ffffff;
+}
+
+/* Ícone em coluna FIXA (24px): o glyph troca conforme o estado (mudo,
+ * alto...) mas a largura não pode variar, senão o slider "pula" quando
+ * o ícone muda. */
+.island-slider-icon {
+    color: rgba(255, 255, 255, 0.85);
+    width: 24px;
+}
+
+.island-slider-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.68);
+    min-width: 38px;
+    text-align: right;
+}
+
+/* ---------------- Grade de controles rápidos ---------------- */
+
+/* Grade vertical; cada linha (.island-toggle-row) é uma BoxLayout
+ * horizontal com 3 células de largura igual (x_expand) — o St não tem
+ * grid CSS, então a grade é feita no JS (_buildControlsGrid). */
+.island-toggles {
+    spacing: 8px;
+}
+
+.island-toggle-row {
+    spacing: 8px;
+}
+
+.island-toggle {
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 14px;
+    padding: 12px 0;
+}
+
+.island-toggle:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.island-toggle:active {
+    background-color: rgba(255, 255, 255, 0.18);
+}
+
+.island-toggle-label {
+    font-size: 10px;
+    font-weight: 600;
+    padding-top: 4px;
+}
+
+/* ---------------- Botões de ícone ---------------- */
+
+.island-icon-button {
+    background-color: rgba(255, 255, 255, 0.06);
+    border-radius: 999px;
+    padding: 8px;
+    color: #ffffff;
+}
+
+.island-icon-button:hover {
+    background-color: rgba(255, 255, 255, 0.14);
+}
+
+.island-icon-button:active {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.island-collapse {
+    padding: 6px;
+    color: rgba(255, 255, 255, 0.68);
+}
+
+/* Botão de fechar do toast de notificação: discreto por padrão (não pode
+ * competir com título/corpo), visível no hover. Área clicável preservada
+ * pelo padding. */
+.island-banner-dismiss {
+    padding: 8px;
+    color: rgba(255, 255, 255, 0.42);
+    background-color: rgba(255, 255, 255, 0.05);
+    opacity: 0.9;
+}
+
+.island-banner-dismiss:hover {
+    color: rgba(255, 255, 255, 0.95);
+    background-color: rgba(255, 255, 255, 0.14);
+    opacity: 1;
+}
+
+/* ---------------- Notificações no painel ---------------- */
+
+.island-notif-section {
+    spacing: 8px;
+}
+
+.island-notif-clear {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: rgba(255, 255, 255, 0.46);
+    background-color: rgba(255, 255, 255, 0.06);
+    border-radius: 999px;
+    padding: 4px 10px;
+}
+
+.island-notif-clear:hover {
+    color: rgba(255, 255, 255, 0.96);
+    background-color: rgba(255, 255, 255, 0.14);
+}
+
+/* Lista de notificações: rola dentro da própria página (a altura da
+ * página vem do JS, _fitPages). Sem teto fixo aqui — o viewport é quem
+ * limita. */
+.island-notif-scroll {
+}
+
+.island-notif-list {
+    spacing: 8px;
+}
+
+.island-notif-row {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 14px;
+    padding: 10px 12px;
+}
+
+.island-notif-row:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.island-notif-icon {
+    border-radius: 10px;
+    margin-right: 10px;
+}
+
+.island-notif-app {
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.46);
+}
+
+.island-notif-time {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.32);
+}
+
+.island-notif-title {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.island-empty {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.46);
+    padding: 8px;
+}
+
+/* ==================== Tema claro (segue o color-scheme do GNOME) ==================== */
+
+.dynamic-island.island-light .island-pill {
+    background-color: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-top-color: rgba(255, 255, 255, 0.6);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+}
+
+.dynamic-island.island-light .island-pill:hover {
+    background-color: rgba(255, 255, 255, 0.97);
+}
+
+.dynamic-island.island-light .island-clock {
+    color: rgba(0, 0, 0, 0.9);
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+}
+
+.dynamic-island.island-light .island-pill-title {
+    color: rgba(0, 0, 0, 0.9);
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+}
+
+.dynamic-island.island-light .island-pill-date,
+.dynamic-island.island-light .island-pill-battery {
+    color: rgba(0, 0, 0, 0.6);
+}
+
+.dynamic-island.island-light .island-pill-icon {
+    color: rgba(0, 0, 0, 0.8);
+    icon-shadow: 0 1px 2px rgba(255, 255, 255, 0.4);
+}
+
+.dynamic-island.island-light .island-pill-control {
+    background-color: rgba(0, 0, 0, 0.06);
+}
+
+.dynamic-island.island-light .island-pill-control:hover {
+    background-color: rgba(0, 0, 0, 0.12);
+}
+
+.dynamic-island.island-light .island-banner {
+    background-color: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-top-color: rgba(255, 255, 255, 0.7);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.22);
+}
+
+.dynamic-island.island-light .island-panel {
+    background-color: rgba(255, 255, 255, 0.96);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-top-color: rgba(255, 255, 255, 0.7);
+    box-shadow: 0 14px 48px rgba(0, 0, 0, 0.28);
+}
+
+.dynamic-island.island-light .island-header-time {
+    color: rgba(0, 0, 0, 0.9);
+    text-shadow: 0 1px 3px rgba(255, 255, 255, 0.5);
+}
+
+.dynamic-island.island-light .island-header-date,
+.dynamic-island.island-light .island-banner-app,
+.dynamic-island.island-light .island-section-title {
+    color: rgba(0, 0, 0, 0.55);
+}
+
+.dynamic-island.island-light .island-banner-title,
+.dynamic-island.island-light .island-media-title {
+    color: rgba(0, 0, 0, 0.9);
+}
+
+.dynamic-island.island-light .island-banner-subtitle,
+.dynamic-island.island-light .island-media-artist,
+.dynamic-island.island-light .island-slider-value {
+    color: rgba(0, 0, 0, 0.6);
+}
+
+.dynamic-island.island-light .island-banner-time,
+.dynamic-island.island-light .island-empty,
+.dynamic-island.island-light .island-notif-time {
+    color: rgba(0, 0, 0, 0.45);
+}
+
+.dynamic-island.island-light .island-card,
+.dynamic-island.island-light .island-notif-row {
+    background-color: rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.dynamic-island.island-light .island-notif-row:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.dynamic-island.island-light .island-notif-app {
+    color: rgba(0, 0, 0, 0.55);
+}
+
+.dynamic-island.island-light .island-notif-title {
+    color: rgba(0, 0, 0, 0.85);
+}
+
+.dynamic-island.island-light .island-notif-clear {
+    color: rgba(0, 0, 0, 0.55);
+    background-color: rgba(0, 0, 0, 0.06);
+}
+
+.dynamic-island.island-light .island-notif-clear:hover {
+    color: rgba(0, 0, 0, 0.9);
+    background-color: rgba(0, 0, 0, 0.12);
+}
+
+.dynamic-island.island-light .island-slider-row .slider {
+    -barlevel-background-color: rgba(0, 0, 0, 0.18);
+    color: #1c1c1e;
+}
+
+.dynamic-island.island-light .island-slider-icon {
+    color: rgba(0, 0, 0, 0.75);
+}
+
+.dynamic-island.island-light .island-toggle {
+    background-color: rgba(0, 0, 0, 0.06);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+.dynamic-island.island-light .island-toggle:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.dynamic-island.island-light .island-toggle:active {
+    background-color: rgba(0, 0, 0, 0.16);
+}
+
+.dynamic-island.island-light .island-icon-button {
+    background-color: rgba(0, 0, 0, 0.06);
+    color: #1c1c1e;
+}
+
+.dynamic-island.island-light .island-icon-button:hover {
+    background-color: rgba(0, 0, 0, 0.12);
+}
+
+.dynamic-island.island-light .island-icon-button:active {
+    background-color: rgba(0, 0, 0, 0.18);
+}
+
+.dynamic-island.island-light .island-collapse {
+    color: rgba(0, 0, 0, 0.65);
+}
+
+.dynamic-island.island-light .island-banner-dismiss {
+    color: rgba(0, 0, 0, 0.42);
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.dynamic-island.island-light .island-banner-dismiss:hover {
+    color: rgba(0, 0, 0, 0.9);
+    background-color: rgba(0, 0, 0, 0.12);
+}
+
+.dynamic-island.island-light .island-system-action {
+    background-color: rgba(0, 0, 0, 0.04);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+.dynamic-island.island-light .island-system-action:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.dynamic-island.island-light .island-system-action .island-toggle-label {
+    color: rgba(0, 0, 0, 0.72);
+}
+
+.dynamic-island.island-light .island-power-action {
+    color: #d84433;
+}
+
+.dynamic-island.island-light .island-power-action .island-toggle-label {
+    color: #d84433;
+}
+
+.dynamic-island.island-light .island-page-dot {
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+.dynamic-island.island-light .island-page-dot:hover {
+    background-color: rgba(0, 0, 0, 0.38);
+}
+
+.dynamic-island.island-light .island-page-dot:checked {
+    background-color: rgba(0, 0, 0, 0.85);
+}
+
+.dynamic-island.island-light .island-page-dot:checked:hover {
+    background-color: #000000;
+}
+
+.dynamic-island.island-light .island-media-status,
+.dynamic-island.island-light .island-media-empty {
+    color: rgba(0, 0, 0, 0.5);
+}
+
+.dynamic-island.island-light .island-play-button {
+    background-color: rgba(0, 0, 0, 0.12);
+}

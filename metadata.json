@@ -1,0 +1,12 @@
+{
+  "uuid": "dynamic-island@eduardoaugustolb",
+  "name": "Dynamic Island",
+  "description": "Uma Dynamic Island para o GNOME, no estilo Apple, que substitui a barra superior. Relógio, mídia, notificações e controles rápidos com animações suaves.",
+  "shell-version": [
+    "50"
+  ],
+  "version": 4,
+  "url": "https://github.com/eduardoaugustolb/gnome-dynamic-island",
+  "settings-schema": "org.gnome.shell.extensions.dynamic-island",
+  "gettext-domain": "dynamic-island"
+}

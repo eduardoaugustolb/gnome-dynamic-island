@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Testes (GJS)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar GJS
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gjs
+
+      - name: Rodar suíte de testes
+        run: gjs -m tests/run.js
+
+  syntax:
+    name: Sintaxe (node --check)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Checagem de sintaxe
+        run: node --check extension.js island.js prefs.js modules/*.js
