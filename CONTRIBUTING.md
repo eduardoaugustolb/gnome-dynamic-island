@@ -1,40 +1,40 @@
-# Contribuindo
+# Contributing
 
-Obrigado por querer contribuir com o **Dynamic Island**! Este guia é curto e direto ao ponto.
+Thank you for contributing to **Dynamic Island**. This guide is intentionally short and practical.
 
-## Começando
+## Getting started
 
-1. Clone e instale para desenvolvimento:
+1. Clone the repository and install it for development:
 
    ```bash
-   make install    # instala e habilita
-   make restart    # recarrega o código após mudanças
+   make install    # install and enable
+   make restart    # reload the code after changes
    ```
 
-2. Depois de cada alteração, rode a suíte e a checagem de sintaxe:
+2. Run the test suite and syntax check after every change:
 
    ```bash
    gjs -m tests/run.js
    node --check island.js extension.js prefs.js modules/*.js
    ```
 
-## O que esperar de uma contribuição
+## Contribution expectations
 
-- **Mudanças focadas**: prefira PRs pequenos e com um único propósito.
-- **Comentários em pt-BR**: o código do projeto é comentado em português; mantenha o padrão.
-- **Testes**: se a mudança tocar `modules/media.js`, `modules/notifications.js` ou `modules/notifQueue.js`, adicione/atualize testes em `tests/`.
-- **Sem dependências novas** sem necessidade: a extensão roda só com o que o GNOME Shell já entrega.
-- **Não quebre o teclado do app**: a regra central do projeto é que a ilha **nunca** rouba o foco de teclado do aplicativo. Mudanças que reintroduzem `grab_key_focus()`/`pushModal` para interação por teclado serão rejeitadas.
+- **Keep changes focused**: prefer small pull requests with one clear purpose.
+- **Code comments**: existing code comments are in Brazilian Portuguese. Keep that convention unless the related code is being translated as part of a dedicated change.
+- **Tests**: when changing `modules/media.js`, `modules/notifications.js`, or `modules/notifQueue.js`, add or update tests under `tests/`.
+- **Avoid unnecessary dependencies**: the extension must run with what GNOME Shell already provides.
+- **Do not break app keyboard input**: the island must **never** steal an app's keyboard focus. Changes that reintroduce `grab_key_focus()` or `pushModal` for keyboard interaction will be rejected.
 
-## Como testar o comportamento
+## Testing behavior
 
-- A extensão só funciona dentro do GNOME Shell de verdade (Wayland/X11). `tests/` cobre apenas os módulos independentes do Shell.
-- Testes manuais úteis: apertar `Espaço` com o Spotify tocando (não deve pausar por engano), deslizar as páginas do painel, arrastar sliders e rolar a lista de notificações sem trocar de página.
+- The extension works only inside a real GNOME Shell session (Wayland or X11). `tests/` covers only Shell-independent modules.
+- Useful manual tests include pressing `Space` while Spotify is playing (it must not pause accidentally), switching panel pages, dragging sliders, and scrolling the notification list without switching pages.
 
-## Processo de PR
+## Pull request process
 
-1. Faça `git pull` da `main` antes de começar.
-2. Crie uma branch descritiva: `fix/play-pause-fantasma`, `feat/pagina-notifs`, etc.
-3. Commit com mensagem clara no estilo do repositório.
-4. Abra o PR; a CI roda testes e sintaxe automaticamente.
-5. Descreva o que mudou e como você testou.
+1. Run `git pull` from `main` before you start.
+2. Create a descriptive branch, such as `fix/phantom-play-pause` or `feat/notifications-page`.
+3. Use a clear commit message consistent with the repository style.
+4. Open a pull request; CI runs tests and syntax checks automatically.
+5. Describe what changed and how you tested it.

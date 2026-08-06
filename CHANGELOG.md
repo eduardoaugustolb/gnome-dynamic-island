@@ -1,42 +1,58 @@
 # Changelog
 
-Todas as mudanças notáveis deste projeto serão documentadas aqui.
+All notable changes to this project are documented in this file.
 
-O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Não publicado]
+## [Unreleased]
 
-### Adicionado
-- Repositório público no GitHub com CI (testes + sintaxe em cada push/PR).
-- README, CONTRIBUTING e licença GPL-3.0.
+### Added
+- Public GitHub repository with CI for tests and syntax checks on every push and pull request.
+- README, CONTRIBUTING guide, and GPL-3.0 license.
+
+### Fixed
+- The media card no longer shows the "Playing/Paused" labels or the "Open" action. Artwork and metadata now have 16 px spacing, and transport controls retain a 1:1 aspect ratio.
+- Wi-Fi and Bluetooth temporarily reveal the native top bar on right-click or long-press so their Quick Settings submenus remain available while the top bar is hidden.
+- Expanded-player artwork uses GNOME Shell's asynchronous `St.TextureCache`, renders remote MPRIS URLs, and reloads only when the track changes, preventing fallback flicker while art loads.
+- The panel carousel no longer passes a `NaN` horizontal translation to Clutter before page width is known, preventing child allocation failures.
+- All pill, banner, and panel container shadows were removed to eliminate rectangular compositor artifacts.
+- The panel uses a stable height based on the largest visible page, preventing controls and system actions from being clipped while navigating.
+- The pill's play/pause icon was replaced by a passive three-bar indicator. It animates from the center during playback and remains static while paused.
+- Section headings now use the page's actual width. Notification title/app text and media titles wrap in the expanded panel instead of being ellipsized.
+- The Quick Settings grid explicitly recalculates its three columns on each allocation, keeping it aligned after screenshots, overview, or Shell scale changes.
+- The carousel no longer uses its intermediate opening width to calculate pages. Control grids and sliders retain their target width without showing part of the next column.
+- Scrolling over the pill accepts the mouse wheel and vertical/horizontal touchpad gestures. The handler is also attached directly to the pill actor under the pointer.
+- The notifications page reserves header and indicator height before measuring its list. When cards exceed available space, vertical scrolling appears inside the island instead of clipping the list.
+- Notification bursts batch visual updates for up to 80 ms, and history is limited to the 50 newest items to avoid GNOME Shell layout spikes.
+- The expanded media player uses 80 px album artwork, matching the visual emphasis of the media banner.
 
 ## [4] - 2026-08-06
 
-### Adicionado
-- Navegação paginada no painel expandido: 3 páginas (**Mídia / Controles / Notificações**) com arrastar horizontal, indicadores clicáveis e navegação por setas no teclado.
-- Status "Tocando/Pausado" no player do painel e empty state "Nenhuma mídia ativa".
-- A lista de notificações agora ocupa a página inteira e rola internamente — nada é recortado pela borda do painel.
+### Added
+- Paged navigation in the expanded panel: three pages (**Media / Controls / Notifications**) navigable by horizontal dragging, clickable indicators, and keyboard arrows.
+- "Playing/Paused" status in the panel player and a "No active media" empty state.
+- The notification list fills its page and scrolls internally; nothing is clipped by the panel edge.
 
-### Corrigido
-- **Play/pause fantasma ao apertar Espaço no Spotify**: a ilha não rouba mais o foco de teclado do aplicativo (a barra de espaço voltava "engolida" pelo Shell). O teclado agora chega intacto ao app; a ilha apenas escuta `Escape` e cliques fora.
-- Barra de progresso de mídia removida (substituída pelo status Tocando/Pausado).
-- Labels em pt-BR completos e "Desligar" com confirmação de dois cliques.
+### Fixed
+- **Phantom Spotify play/pause when pressing Space**: the island no longer steals an app's keyboard focus. Space now reaches the app intact; the island only listens for `Escape` and outside clicks.
+- Removed the media progress bar, replacing it with Playing/Paused status.
+- Completed Brazilian Portuguese labels and added two-click confirmation for Power Off.
 
 ## [3] - 2026-08-05
 
-### Corrigido
-- Posicionamento da data na pill (espelhado para manter a hora centrada).
-- Capa de álbum via URL (`http(s)://`) além de `file://` — capas do Spotify passam a aparecer.
-- Elipsização do título na pill limitada à largura do monitor.
+### Fixed
+- Date positioning in the pill, mirrored to keep the time centered.
+- Album artwork via `http(s)://` URLs in addition to `file://`; Spotify artwork now appears.
+- Pill-title ellipsizing is limited to the monitor width.
 
 ## [2] - 2026-08-04
 
-### Adicionado
-- Ação "Abrir no app" no player.
-- Confirmação em dois cliques para desligar.
-- Lista de notificações rolável dentro do painel.
+### Added
+- "Open in app" media-player action.
+- Two-click confirmation before power-off.
+- Scrollable notification list inside the panel.
 
 ## [1] - 2026-08-01
 
-### Adicionado
-- Versão inicial: pill com relógio/bateria, toasts de notificação, player MPRIS e controles rápidos (volume, brilho, toggles e ações de sistema).
+### Added
+- Initial release: pill with clock/battery, notification toasts, MPRIS media player, and quick controls for volume, brightness, toggles, and system actions.

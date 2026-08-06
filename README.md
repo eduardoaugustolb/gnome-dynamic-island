@@ -1,96 +1,95 @@
 # Dynamic Island
 
-Uma **Dynamic Island** para o GNOME Shell, no estilo Apple, que substitui a barra superior. Relógio, mídia, notificações e controles rápidos em uma única ilha compacta com animações suaves.
+An Apple-inspired **Dynamic Island** for GNOME Shell that replaces the top bar. Clock, media, notifications, and quick settings live in one compact island with smooth animations.
 
-![Licença: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)
+![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)
 [![CI](https://github.com/eduardoaugustolb/gnome-dynamic-island/actions/workflows/ci.yml/badge.svg)](https://github.com/eduardoaugustolb/gnome-dynamic-island/actions)
 
-> Testado no **GNOME Shell 50**. Requer o GJS/Clutter/St do próprio Shell (nenhuma dependência extra).
+> Tested on **GNOME Shell 50**. It requires only GNOME Shell's built-in GJS, Clutter, and St libraries.
 
-## Funcionalidades
+## Features
 
-- **Substitui a barra superior**: a ilha fica centralizada no topo, em modo pill, mostrando data, horário e bateria.
-- **Mídia (MPRIS)**: player de mídia do sistema (Spotify, YouTube Music, etc.) com capa do álbum, título/artista, controles de play/pause/anterior/próxima e ação "Abrir no app".
-- **Notificações**: toasts sequenciais (fila de amostragem) e lista rolável dentro do painel, com "Limpar" e ação por clique.
-- **Controles rápidos**: volume, brilho, Wi-Fi, Bluetooth, Modo escuro, Luz noturna, Não perturbe.
-- **Ações de sistema**: Bloquear, Suspender e Desligar (com confirmação de dois cliques para evitar acidentes).
-- **Painel paginado**: o painel expandido desliza horizontalmente entre **Mídia / Controles / Notificações** por arrastar, pelos indicadores (bolinhas) ou pelas setas do teclado.
-- **Tema claro/escuro**: segue o `color-scheme` do GNOME automaticamente.
+- **Top bar replacement**: a centered pill shows the date, time, and battery level.
+- **Media (MPRIS)**: system media players (Spotify, YouTube Music, and more) with album artwork in the banner and expanded panel, title/artist, and play/pause/previous/next controls.
+- **Notifications**: sequential toasts and a scrollable panel list with Clear and click actions. The panel keeps the 50 most recent notifications and batches bursts of updates to keep GNOME Shell responsive.
+- **Quick settings**: volume, brightness, Wi-Fi, Bluetooth, dark mode, Night Light, and Do Not Disturb.
+- **System actions**: Lock, Suspend, and Power Off, with a two-click confirmation for power-off.
+- **Paged panel**: swipe horizontally between **Media / Controls / Notifications**, use the page indicators, or use the keyboard arrow keys.
+- **Light/dark theme**: automatically follows GNOME's `color-scheme`.
 
-## Como funciona
+## How it works
 
-A ilha tem três camadas, trocadas com animação de tamanho/opacidade:
+The island has three layers, switched with size and opacity animations:
 
-| Estado | Comportamento |
+| State | Behavior |
 | --- | --- |
-| **Pill** | Estado ocioso: relógio, data, bateria e, se houver mídia, controles rápidos. |
-| **Banner** | "Live activity" temporária (notificação ou mídia que acabou de começar a tocar), que se recolhe sozinha. |
-| **Painel** | Expandido por clique/roda no centro, com as 3 páginas deslizáveis. |
+| **Pill** | Idle state: clock, date, battery, and media controls when media is active. |
+| **Banner** | A temporary live activity for a notification or newly started media that dismisses itself. |
+| **Panel** | Opens with a click or scroll on the center and contains the three swipeable pages. |
 
-## Instalação
+## Installation
 
-### Manual (recomendado para desenvolvimento)
+### Manual installation (recommended for development)
 
 ```bash
-make install        # copia para ~/.local/share/gnome-shell/extensions e habilita
-make restart        # desabilita, reinstala e reabilita (recarrega o código)
+make install        # copy to ~/.local/share/gnome-shell/extensions and enable it
+make restart        # disable, reinstall, and re-enable it (reloads the code)
 ```
 
-### Pela loja de extensões
+### GNOME Extensions website
 
-_Em breve: pacote publicado no [extensions.gnome.org](https://extensions.gnome.org)._
+_Coming soon: a package published on [extensions.gnome.org](https://extensions.gnome.org)._
 
-## Uso
+## Usage
 
-| Gestos | Ação |
+| Gesture | Action |
 | --- | --- |
-| `scroll` (esquerda/direita) na pill | Alterna a área ativa (relógio / mídia / notificações) |
-| Clique na pill | Abre o painel |
-| `scroll` para baixo na pill | Recolhe |
-| `Escape` | Recolhe o banner/painel |
-| `Super+Shift+Espaço` | Play/pausa da mídia (atalho global) |
-| Arrastar para o lado no painel | Troca de página |
-| Clique nas bolinhas | Vai para a página |
-| Setas `←`/`→` (com foco no painel) | Troca de página |
+| Mouse wheel or `scroll` (up/down/left/right) over the pill | Switch the active area (clock / media / notifications) |
+| Click the pill | Open the panel |
+| `Escape` | Dismiss the banner or panel |
+| `Super+Shift+Space` | Play/pause media (global shortcut) |
+| Swipe sideways in the panel | Switch page |
+| Click a page indicator | Go to that page |
+| `←`/`→` arrows (after focusing a panel control) | Switch page |
 
-> A ilha **nunca rouba o teclado** do aplicativo: ao contrário de implementações que dão foco ao Shell e "engoliam" a tecla Espaço (o famoso bug do play/pause fantasma), aqui o teclado continua indo direto para o app — a ilha apenas escuta `Escape` e cliques fora dela.
+> The island **never steals keyboard input** from an app. Unlike implementations that focus GNOME Shell and swallow the Space key, keyboard input continues going straight to the app; the island only listens for `Escape` and outside clicks.
 
-## Configuração
+## Configuration
 
-Abra *Configurações → Extensões → Dynamic Island* (ou use o botão de engrenagem). As preferências incluem:
+Open *Settings → Extensions → Dynamic Island* (or use the gear button). Available preferences include:
 
-- Largura do painel expandido / altura da pill
-- Duração dos toasts (peek) e do banner de mídia
-- Mostrar/ocultar controles, notificações e mídia
-- Cor de destaque
-- Animações (desligáveis)
+- Expanded panel width and pill height
+- Toast and media-banner durations
+- Show or hide controls, notifications, and media
+- Accent color
+- Optional animations
 
-## Desenvolvimento
+## Development
 
-### Estrutura
+### Layout
 
 ```
-extension.js   Entrada da extensão (enable/disable, keybinding global)
-island.js      A ilha: pill, banner, painel paginado e toda a UI
-prefs.js       Painel de preferências
-modules/       Módulos de dados (media.js, controls.js, notifications.js, notifQueue.js)
-schemas/       Esquema GSettings
-tests/         Suíte de testes sem framework (roda com GJS puro)
+extension.js   Extension entry point (enable/disable, global keybinding)
+island.js      The island: pill, banner, paged panel, and UI
+prefs.js       Preferences panel
+modules/       Data modules (media.js, controls.js, notifications.js, notifQueue.js)
+schemas/       GSettings schema
+tests/         Framework-free test suite (runs with plain GJS)
 ```
 
-### Testes
+### Tests
 
 ```bash
-gjs -m tests/run.js     # 37 testes: media, notifications, notifQueue e integração
-node --check island.js  # verificação de sintaxe
+gjs -m tests/run.js     # 37 tests: media, notifications, notifQueue, and integration
+node --check island.js  # syntax check
 ```
 
-Os testes cobrem apenas os módulos independentes do Shell (`media.js`, `notifications.js`, `notifQueue.js`) — `island.js`/`controls.js` dependem de `resource:///org/gnome/shell` e só rodam dentro do Shell de verdade.
+Tests cover only modules independent from GNOME Shell (`media.js`, `notifications.js`, and `notifQueue.js`). `island.js` and `controls.js` depend on `resource:///org/gnome/shell` and run only inside GNOME Shell.
 
 ### CI
 
-`.github/workflows/ci.yml` roda os testes e a checagem de sintaxe em cada push/PR.
+`.github/workflows/ci.yml` runs the tests and syntax check on every push and pull request.
 
-## Licença
+## License
 
-Distribuído sob a **GNU General Public License v3.0**. Veja [LICENSE](LICENSE).
+Distributed under the **GNU General Public License v3.0**. See [LICENSE](LICENSE).

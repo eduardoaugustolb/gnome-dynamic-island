@@ -1,7 +1,11 @@
 import GObject from 'gi://GObject';
 import GLib from 'gi://GLib';
 
-export const MAX_NOTIFICATIONS = 8;
+// O histórico precisa ser grande o bastante para que a página rolável seja
+// útil, mas sempre finito: guardar referências a todas as notificações que
+// já chegaram transformaria uma rajada longa em consumo de memória/layout
+// sem limite dentro do Shell.
+export const MAX_NOTIFICATIONS = 50;
 
 /**
  * Acompanha notificações do messageTray. Mantém uma lista dos mais recentes

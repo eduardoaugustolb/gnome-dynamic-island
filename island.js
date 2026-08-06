@@ -20,6 +20,10 @@ const STARTUP_GRACE_MS = 3000;
 const PILL_MIN_WIDTH = 210;
 const SWIPE_THRESHOLD = 36;
 const PAGE_SWIPE_THRESHOLD = 56;
+const NOTIF_REFRESH_DELAY_MS = 80;
+const CONTROL_GRID_COLUMNS = 3;
+const CONTROL_GRID_GAP = 8;
+const DEVICE_MENU_HOLD_MS = 450;
 
 /* Áreas do painel expandido, em ordem: cada uma é uma "página" horizontal
  * deslizável dentro da ilha (ver _buildPanel). A navegação por arrastar/
@@ -93,10 +97,12 @@ class Island extends St.Widget {
         this._started = false;
         this._revealing = false;
         this._scrollAccum = 0;
+        this._scrollAxis = null;
         this._scrollCooldownId = 0;
         this._pageIndex = 1;
         this._lastPage = null;
         this._pageDrag = null;
+        this._notifRefreshId = 0;
 
         this._controls = new Controls();
         this._media = new MediaWatcher();
@@ -158,7 +164,7 @@ class Island extends St.Widget {
                 this._notifQueue.discard(
                     n => !this._notifs.notifications.includes(n));
                 if (this._state === 'panel')
-                    this._updatePanelNotifs();
+                    this._queuePanelNotifsRefresh();
                 if (this._state === 'collapsed' &&
                     this._areaId === 'notifications' &&
                     !this._notifs.getLatest())
@@ -180,43 +186,12 @@ class Island extends St.Widget {
         St.Settings.get().connectObject('notify::color-scheme',
             () => this._applyTheme(), this);
 
-        this.connect('scroll-event', (_a, event) => {
-            if (this._state !== 'collapsed')
-                return Clutter.EVENT_PROPAGATE;
-            const dir = event.get_scroll_direction();
-            if (dir === Clutter.ScrollDirection.LEFT) {
-                this._swapAreaDebounced(1);
-                return Clutter.EVENT_STOP;
-            }
-            if (dir === Clutter.ScrollDirection.RIGHT) {
-                this._swapAreaDebounced(-1);
-                return Clutter.EVENT_STOP;
-            }
-            if (dir !== Clutter.ScrollDirection.SMOOTH)
-                return Clutter.EVENT_PROPAGATE;
-            // Trackpads emitem uma rajada de vários eventos "smooth" para
-            // um único gesto de duas dedos — sem acumular e sem um
-            // cooldown depois de trocar, cada micro-evento já disparava
-            // uma troca de área, e a pill ficava "piscando" entre as
-            // áreas em vez de trocar uma vez por gesto.
-            const [dx, dy] = event.get_scroll_delta();
-            if (Math.abs(dx) <= Math.abs(dy))
-                return Clutter.EVENT_PROPAGATE;
-            const now = Date.now();
-            if (now - (this._lastScrollAt ?? 0) > 400)
-                this._scrollAccum = 0;
-            this._lastScrollAt = now;
-            this._scrollAccum += dx;
-            // Limiar bem mais alto que o normal: um mero jitter do
-            // touchpad (ou o cursor só passando por cima da pill) não
-            // pode disparar troca de área sem um gesto claramente
-            // deliberado.
-            if (Math.abs(this._scrollAccum) > 4.5) {
-                this._swapAreaDebounced(this._scrollAccum < 0 ? 1 : -1);
-                this._scrollAccum = 0;
-            }
-            return Clutter.EVENT_STOP;
-        });
+        // O evento normalmente chega na própria pill (o ator sob o cursor),
+        // não necessariamente no contêiner raiz. Mantemos também o fallback
+        // no raiz para temas/atores filhos que o propaguem diretamente.
+        this.connect('scroll-event', (_a, event) => this._onPillScroll(event));
+        this._pill.connect('scroll-event',
+            (_a, event) => this._onPillScroll(event));
 
         this.connect('notify::allocation', () => {
             if (this._pendingSize) {
@@ -269,6 +244,52 @@ class Island extends St.Widget {
     /* ================================================================
      * Construção da UI
      * ================================================================ */
+
+    /* Troca as áreas da pill com a roda comum e com gestos de touchpad.
+     * Antes só LEFT/RIGHT e smooth predominantemente horizontal eram
+     * aceitos. Na prática, a roda do mouse produz UP/DOWN e todo o gesto
+     * vertical era propagado/ignorado — exatamente por isso a navegação
+     * documentada não respondia ao passar o cursor sobre a ilha. */
+    _onPillScroll(event) {
+        if (this._state !== 'collapsed')
+            return Clutter.EVENT_PROPAGATE;
+
+        const dir = event.get_scroll_direction();
+        if (dir === Clutter.ScrollDirection.LEFT ||
+            dir === Clutter.ScrollDirection.DOWN) {
+            this._swapAreaDebounced(1);
+            return Clutter.EVENT_STOP;
+        }
+        if (dir === Clutter.ScrollDirection.RIGHT ||
+            dir === Clutter.ScrollDirection.UP) {
+            this._swapAreaDebounced(-1);
+            return Clutter.EVENT_STOP;
+        }
+        if (dir !== Clutter.ScrollDirection.SMOOTH)
+            return Clutter.EVENT_PROPAGATE;
+
+        const [dx, dy] = event.get_scroll_delta();
+        const horizontal = Math.abs(dx) > Math.abs(dy);
+        const axis = horizontal ? 'x' : 'y';
+        const delta = horizontal ? dx : dy;
+        const now = Date.now();
+        if (axis !== this._scrollAxis || now - (this._lastScrollAt ?? 0) > 400)
+            this._scrollAccum = 0;
+        this._scrollAxis = axis;
+        this._lastScrollAt = now;
+        this._scrollAccum += delta;
+
+        // Deltas smooth de touchpad são pequenos; 1.5 exige um gesto
+        // intencional sem obrigar o usuário a repetir a rolagem inteira.
+        if (Math.abs(this._scrollAccum) >= 1.5) {
+            const next = horizontal
+                ? this._scrollAccum < 0
+                : this._scrollAccum > 0;
+            this._swapAreaDebounced(next ? 1 : -1);
+            this._scrollAccum = 0;
+        }
+        return Clutter.EVENT_STOP;
+    }
 
     _buildPill() {
         const box = new St.BoxLayout({
@@ -340,29 +361,33 @@ class Island extends St.Widget {
         this._pillLeft.add_child(this._pillDate);
         this._pillRight.add_child(this._batteryGroup);
 
-        this._pillMediaBtn = new St.Button({
-            style_class: 'island-icon-button island-pill-control',
-            child: new St.Icon({
-                icon_name: 'media-playback-start-symbolic',
-                icon_size: 16,
-            }),
-            reactive: true,
-            // can_focus fica desligado de propósito: um botão focado
-            // responde à barra de espaço como "clique" (padrão do
-            // St.Button), e isso entrava em conflito com o atalho nativo
-            // de Espaço do Spotify/YouTube etc. — bastava o foco do
-            // teclado do Shell ficar preso aqui pra pausar a mídia
-            // sozinha. O clique/toque com o mouse continua funcionando
-            // normalmente; o atalho de teclado dedicado é
-            // Super+Shift+Space (veja MEDIA_KEYBINDING).
-            can_focus: false,
-            accessible_name: 'Reproduzir/Pausar',
+        // Indicador passivo de reprodução: a pill não oferece controle de
+        // mídia por clique, então os símbolos play/pause pareciam um botão
+        // quebrado. Três barras animadas comunicam estado sem sugerir ação.
+        this._pillMediaLevels = new St.BoxLayout({
+            style_class: 'island-media-levels',
+            vertical: false,
+            reactive: false,
+            accessible_name: 'Indicador de reprodução',
             visible: false,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        this._pillMediaBtn.connect('clicked',
-            () => this._media.playPause());
-        this._pillRight.add_child(this._pillMediaBtn);
+        this._pillMediaBars = [];
+        for (let i = 0; i < 3; i++) {
+            const bar = new St.Widget({
+                style_class: 'island-media-level',
+                reactive: false,
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            // scale_y com pivot no centro faz a barra crescer para cima e
+            // para baixo simultaneamente, sem parecer um equalizador preso
+            // à base.
+            bar.set_pivot_point(0.5, 0.5);
+            this._pillMediaBars.push(bar);
+            this._pillMediaLevels.add_child(bar);
+        }
+        this._setPillMediaLevels(false);
+        this._pillRight.add_child(this._pillMediaLevels);
 
         this._pillDismissBtn = new St.Button({
             style_class: 'island-icon-button island-pill-control',
@@ -582,11 +607,18 @@ class Island extends St.Widget {
             visible: false,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        const mediaTop = new St.BoxLayout({vertical: false});
-        this._mediaArt = new St.Icon({
+        const mediaTop = new St.BoxLayout({
+            style_class: 'island-media-top',
+            vertical: false,
+        });
+        // St.Icon não renderiza de modo confiável algumas URLs remotas de
+        // capa MPRIS. Este holder recebe a textura assíncrona da capa.
+        this._mediaArt = new St.Widget({
             style_class: 'island-media-art',
-            icon_size: 44,
-            icon_name: 'multimedia-player-symbolic',
+            layout_manager: new Clutter.BinLayout(),
+            width: 80,
+            height: 80,
+            clip_to_allocation: true,
             y_align: Clutter.ActorAlign.CENTER,
         });
         const mediaText = new St.BoxLayout({
@@ -594,43 +626,25 @@ class Island extends St.Widget {
             x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
         });
+        this._mediaText = mediaText;
         this._mediaTitle = new St.Label({
             style_class: 'island-media-title',
             x_align: Clutter.ActorAlign.START,
+            x_expand: true,
         });
+        this._mediaTitle.clutter_text.line_wrap = true;
+        this._mediaTitle.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
+        this._mediaTitle.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
         this._mediaArtist = new St.Label({
             style_class: 'island-media-artist',
             x_align: Clutter.ActorAlign.START,
+            x_expand: true,
         });
         mediaText.add_child(this._mediaTitle);
         mediaText.add_child(this._mediaArtist);
 
-        /* Status "Tocando"/"Pausado": indicação confiável de estado no
-         * lugar da (removida) barra de progresso. */
-        this._mediaStatus = new St.Label({
-            style_class: 'island-media-status',
-            text: '',
-            y_align: Clutter.ActorAlign.CENTER,
-            visible: false,
-        });
-
-        /* Ação secundária "Abrir no app": resolve o .desktop do player
-         * MPRIS (Spotify etc.) e o lança. Fica à direita da linha de
-         * texto, aproveitando o canto que antes ficava vazio. */
-        this._mediaOpenBtn = new St.Button({
-            style_class: 'island-notif-clear',
-            label: 'Abrir',
-            reactive: true,
-            can_focus: true,
-            y_align: Clutter.ActorAlign.CENTER,
-            accessible_name: 'Abrir no app',
-        });
-        this._mediaOpenBtn.connect('clicked',
-            () => this._openMediaApp());
         mediaTop.add_child(this._mediaArt);
         mediaTop.add_child(mediaText);
-        mediaTop.add_child(this._mediaStatus);
-        mediaTop.add_child(this._mediaOpenBtn);
 
         const mediaCtrls = new St.BoxLayout({
             style_class: 'island-media-controls',
@@ -644,8 +658,8 @@ class Island extends St.Widget {
             'media-playback-start-symbolic', 'Reproduzir/Pausar', 22,
             () => this._media.playPause());
         this._mediaPlayBtn.style_class += ' island-play-button';
-        // Mesmo motivo do _pillMediaBtn: sem foco de teclado aqui pra
-        // Espaço não brigar com o atalho nativo do player.
+        // Sem foco de teclado para Espaço não brigar com o atalho nativo
+        // do player.
         this._mediaPlayBtn.can_focus = false;
         this._mediaPrevBtn.can_focus = false;
         this._mediaNextBtn = this._makeIconButton(
@@ -681,6 +695,7 @@ class Island extends St.Widget {
         this._controlsSection = new St.BoxLayout({
             style_class: 'island-section',
             vertical: true,
+            x_expand: true,
         });
         this._controlsTitle = new St.Label({
             style_class: 'island-section-title',
@@ -688,6 +703,7 @@ class Island extends St.Widget {
             x_align: Clutter.ActorAlign.START,
             x_expand: true,
         });
+        this._controlsTitle.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
         this._controlsSection.add_child(this._controlsTitle);
 
         /* Volume */
@@ -773,6 +789,7 @@ class Island extends St.Widget {
             x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
         });
+        this._notifHeader = notifHeader;
         this._notifTitle = new St.Label({
             style_class: 'island-section-title',
             text: 'Notificações',
@@ -780,6 +797,7 @@ class Island extends St.Widget {
             x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
         });
+        this._notifTitle.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
         this._notifClearBtn = new St.Button({
             style_class: 'island-notif-clear',
             label: 'Limpar',
@@ -820,6 +838,7 @@ class Island extends St.Widget {
         const row = new St.Widget({
             style_class: 'island-slider-row',
             layout_manager: new Clutter.BinLayout(),
+            x_expand: true,
         });
         const box = new St.BoxLayout({
             vertical: false,
@@ -877,10 +896,104 @@ class Island extends St.Widget {
         }));
         btn.set_child(box);
         btn.connect('clicked', () => {
+            if (btn._suppressToggle) {
+                btn._suppressToggle = false;
+                return;
+            }
             const next = !this._controls.getToggle(def.name);
             this._controls.setToggle(def.name, next);
         });
+        if (def.name === 'wifi' || def.name === 'bluetooth')
+            this._addDeviceMenuGesture(btn, def.name);
         return btn;
+    }
+
+    /* Toque rápido preserva o toggle. Clique direito ou pressionar por
+     * 450 ms abre o submenu NATIVO do Quick Settings: assim a ilha ganha
+     * redes/dispositivos, área rolável e "Mais configurações" sem duplicar
+     * nem assumir a autenticação de Wi-Fi/Bluetooth do Shell. */
+    _addDeviceMenuGesture(button, type) {
+        let holdId = 0;
+        let opened = false;
+        const cancelHold = () => {
+            if (holdId) {
+                GLib.source_remove(holdId);
+                holdId = 0;
+            }
+        };
+        button.connect('button-press-event', (_a, event) => {
+            const mouseButton = event.get_button();
+            if (mouseButton === 3) {
+                cancelHold();
+                button._suppressToggle = true;
+                this._openNativeDeviceMenu(type);
+                return Clutter.EVENT_STOP;
+            }
+            if (mouseButton !== 1)
+                return Clutter.EVENT_PROPAGATE;
+            opened = false;
+            cancelHold();
+            holdId = GLib.timeout_add(GLib.PRIORITY_DEFAULT,
+                DEVICE_MENU_HOLD_MS, () => {
+                    holdId = 0;
+                    opened = true;
+                    button._suppressToggle = true;
+                    this._openNativeDeviceMenu(type);
+                    return GLib.SOURCE_REMOVE;
+                });
+            return Clutter.EVENT_PROPAGATE;
+        });
+        button.connect('button-release-event', () => {
+            cancelHold();
+            // Se o botão foi segurado, o clicked subsequente é ignorado
+            // pelo handler acima; no próximo clique curto ele volta a
+            // alternar normalmente.
+            if (!opened)
+                button._suppressToggle = false;
+            return Clutter.EVENT_PROPAGATE;
+        });
+    }
+
+    _openNativeDeviceMenu(type) {
+        // network.js e bluetooth.js do próprio Shell já mantêm a lista de
+        // redes/dispositivos, conexão, pareamento, rolagem e o link para o
+        // painel de configurações. Abrir esse menu evita duas fontes de
+        // verdade e mantém inclusive diálogos de senha/polkit corretos.
+        this._showCollapsed();
+        GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+            try {
+                const quickSettings = Main.panel.statusArea.quickSettings;
+                const toggle = type === 'wifi'
+                    ? quickSettings?._network?._wirelessToggle
+                    : quickSettings?._bluetooth?.quickSettingsItems?.find(
+                        item => item?.menu);
+                if (!quickSettings?.menu || !toggle?.menu)
+                    return GLib.SOURCE_REMOVE;
+                // A extensão pode esconder a barra superior. Nesse caso o
+                // menu nativo existe, mas o ator-pai está invisível e nada
+                // é desenhado. Revelamos a barra somente enquanto o menu
+                // estiver aberto e a ocultamos de novo no fechamento.
+                const panelBox = Main.layoutManager.panelBox;
+                const restoreHiddenPanel = !panelBox.visible &&
+                    this._settings.get_boolean('hide-top-bar');
+                if (restoreHiddenPanel) {
+                    panelBox.show();
+                    const signalId = quickSettings.menu.connect(
+                        'open-state-changed', (_menu, isOpen) => {
+                            if (isOpen)
+                                return;
+                            quickSettings.menu.disconnect(signalId);
+                            if (this._settings.get_boolean('hide-top-bar'))
+                                panelBox.hide();
+                        });
+                }
+                quickSettings.menu.open();
+                toggle.menu.open();
+            } catch (e) {
+                logError(e, 'dynamic-island:device-menu');
+            }
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _buildPowerCell(def) {
@@ -950,21 +1063,25 @@ class Island extends St.Widget {
         const grid = new St.BoxLayout({
             style_class: 'island-toggles',
             vertical: true,
+            x_expand: true,
         });
-        for (let i = 0; i < TOGGLES.length; i += 3) {
+        this._toggleRows = [];
+        for (let i = 0; i < TOGGLES.length; i += CONTROL_GRID_COLUMNS) {
             const row = new St.BoxLayout({
                 style_class: 'island-toggle-row',
                 vertical: false,
+                x_expand: true,
             });
-            for (const def of TOGGLES.slice(i, i + 3)) {
+            for (const def of TOGGLES.slice(i, i + CONTROL_GRID_COLUMNS)) {
                 const cell = this._buildToggle(def);
                 this._toggleButtons[def.name] = cell;
                 row.add_child(cell);
             }
             // Slot vazio pra linha "raggada" (2 células) manter a mesma
             // proporção de 1/3 das linhas cheias.
-            while (row.get_n_children() < 3)
+            while (row.get_n_children() < CONTROL_GRID_COLUMNS)
                 row.add_child(new St.Widget({x_expand: true}));
+            this._toggleRows.push(row);
             grid.add_child(row);
         }
         return grid;
@@ -976,6 +1093,7 @@ class Island extends St.Widget {
         const section = new St.BoxLayout({
             style_class: 'island-section',
             vertical: true,
+            x_expand: true,
         });
         const title = new St.Label({
             style_class: 'island-section-title',
@@ -983,13 +1101,17 @@ class Island extends St.Widget {
             x_align: Clutter.ActorAlign.START,
             x_expand: true,
         });
+        title.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+        this._systemTitle = title;
         section.add_child(title);
         const row = new St.BoxLayout({
             style_class: 'island-toggle-row',
             vertical: false,
+            x_expand: true,
         });
         for (const def of POWER_ACTIONS)
             row.add_child(this._buildPowerCell(def));
+        this._powerRow = row;
         section.add_child(row);
         return section;
     }
@@ -1042,6 +1164,10 @@ class Island extends St.Widget {
         if (this._scrollCooldownId) {
             GLib.source_remove(this._scrollCooldownId);
             this._scrollCooldownId = 0;
+        }
+        if (this._notifRefreshId) {
+            GLib.source_remove(this._notifRefreshId);
+            this._notifRefreshId = 0;
         }
         if (this._settingsSig) {
             this._settings.disconnect(this._settingsSig);
@@ -1222,10 +1348,9 @@ class Island extends St.Widget {
         this._revealing = false;
         const w = this._settings.get_int('expanded-width');
         this._panel.visible = true;
-        // Mede as páginas JÁ ciente da largura alvo: o viewport ganha a
-        // altura da maior página (limitada ao teto) e cada página fica com
-        // exatamente a largura do painel — em vez de a lista ser recortada
-        // pela borda, ela passa a rolar dentro da própria página.
+        // Mede a página ativa já ciente da largura alvo. Cada área recebe
+        // só a altura de que precisa; notificações continuam limitadas e
+        // roláveis quando ultrapassam o teto disponível.
         this._fitPages(w);
         this._positionTrack(this._pageIndex, false);
         let h;
@@ -1240,26 +1365,24 @@ class Island extends St.Widget {
         this._grabFocus();
     }
 
-    /* Responsividade vertical: cada página vive num viewport com altura
-     * própria = a maior altura natural entre as páginas visíveis, limitada
-     * pelo teto do painel (_maxHeight). Como cada página tem seu próprio
-     * espaço (nada disputa a mesma coluna), não há mais recorte nem
-     * estouro: a lista de notificações é a única que rola, e só dentro da
-     * própria página. O viewport é quem "encolhe" quando não há o que
-     * preencher (ex.: só uma notificação curta). */
+    /* Responsividade vertical: o viewport das páginas recebe somente a
+     * altura que sobra DEPOIS do header, indicadores, espaçamentos e padding
+     * do painel. Antes ele podia receber _maxHeight inteiro; o painel então
+     * era cortado por fora e o ScrollView nunca era alocado menor que sua
+     * lista. Com uma alocação real e limitada, a lista de notificações rola
+     * dentro da ilha em vez de expandir a ilha indefinidamente. */
     _fitPages(width) {
         if (this._state !== 'panel')
             return;
-        const w = width ?? this.width ??
-            this._settings.get_int('expanded-width');
-        // Largura ÚTIL das páginas = largura interna do painel (sem o
-        // padding do .island-panel). Antes da primeira alocação o
-        // viewport ainda tem largura antiga/0, então usa a largura alvo
-        // menos o padding horizontal; a alocação final corrige no
-        // notify::allocation (ver _init).
-        const inner = this._pagesViewport.width > 0
-            ? this._pagesViewport.width
-            : Math.max(0, w - 32);
+        // A animação abre a ilha a partir da largura da pill. Ler
+        // pagesViewport.width durante essa animação alternava a largura do
+        // track entre valores intermediários e deixava grids/controles
+        // calculados para uma página maior que o recorte (o card seguinte
+        // aparecia cortado na direita). A geometria do carrossel usa sempre
+        // a largura-alvo estável; o parâmetro existe só para a abertura e
+        // mudanças explícitas de preferência.
+        const w = width ?? this._settings.get_int('expanded-width');
+        const inner = Math.max(0, w - 32);
         this._pageWidth = inner;
         // Cada página tem a largura exata do viewport (e o track, PAGE_COUNT
         // vezes ela): o deslize anda de "página" em "página" com largura
@@ -1267,21 +1390,83 @@ class Island extends St.Widget {
         this._pagesTrack.width = inner * PAGE_COUNT;
         for (const page of this._pages)
             page.width = inner;
+        this._fitPageLabels(inner);
+        this._fitControlGrid(inner);
+        // Altura estável: usa a maior página visível para não recortar os
+        // controles ao alternar o carrossel.
         let pageH = 0;
         for (const page of this._pages) {
             if (!page.visible)
                 continue;
             try {
-                const [, natH] = page.get_preferred_height(inner);
-                pageH = Math.max(pageH, natH);
+                const [, naturalHeight] = page.get_preferred_height(inner);
+                pageH = Math.max(pageH, naturalHeight);
             } catch (_) {
-                // página não medida: mantém o que já tem
+                // Mantém a maior medida disponível.
             }
         }
-        pageH = _clamp(pageH, 96, this._maxHeight());
+        let headerH = 0;
+        let indicatorsH = 0;
+        try { [, headerH] = this._header.get_preferred_height(inner); } catch (_) {}
+        try { [, indicatorsH] = this._pageIndicators.get_preferred_height(inner); } catch (_) {}
+        // 32px de padding vertical do painel + dois espaços de 16px entre
+        // header/páginas/indicadores (valores de .island-panel no CSS).
+        const panelChrome = headerH + indicatorsH + 64;
+        const maxPageH = Math.max(96, this._maxHeight() - panelChrome);
+        pageH = _clamp(pageH, 96, maxPageH);
         if (this._pagesViewport.height !== pageH)
             this._pagesViewport.height = pageH;
         this._positionTrack(this._pageIndex, false);
+    }
+
+    /* St.BoxLayout não mantém uma fração fixa para filhos x_expand quando
+     * recebe uma nova alocação durante transições do Shell (screenshot,
+     * overview, mudança de escala). Ele podia atribuir toda a largura ao
+     * primeiro toggle e deixar os seguintes fora do viewport. A grade tem
+     * sempre três colunas, então definimos as larguras de forma explícita. */
+    _fitControlGrid(width) {
+        if (!this._toggleRows || !this._powerRow)
+            return;
+        const cellWidth = Math.max(1, Math.floor(
+            (width - CONTROL_GRID_GAP * (CONTROL_GRID_COLUMNS - 1)) /
+            CONTROL_GRID_COLUMNS));
+        const fitRow = row => {
+            row.width = width;
+            for (const child of row.get_children()) {
+                child.x_expand = false;
+                child.width = cellWidth;
+            }
+        };
+        for (const row of this._toggleRows)
+            fitRow(row);
+        fitRow(this._powerRow);
+    }
+
+    /* Labels de seção não podem ficar só com sua largura natural: em
+     * BoxLayout vertical, isso fazia o Pango elipsizar "Notificações" e
+     * "Controles rápidos" apesar de a página ter espaço livre. Reservamos
+     * explicitamente a largura interna da página; no cabeçalho de
+     * notificações descontamos apenas o botão Limpar quando ele existe. */
+    _fitPageLabels(width) {
+        if (this._controlsSection) {
+            this._controlsSection.width = width;
+            this._controlsTitle.width = width;
+        }
+        if (this._systemSection) {
+            this._systemSection.width = width;
+            this._systemTitle.width = width;
+        }
+        if (this._notifHeader) {
+            this._notifHeader.width = width;
+            let clearWidth = 0;
+            if (this._notifClearBtn.visible) {
+                try {
+                    [, clearWidth] = this._notifClearBtn.get_preferred_width(-1);
+                } catch (_) {}
+            }
+            this._notifTitle.width = Math.max(1, width - clearWidth);
+            this._notifScroll.width = width;
+        }
     }
 
     /* Posiciona o track: a página ativa encosta na borda esquerda do
@@ -1292,7 +1477,14 @@ class Island extends St.Widget {
             return;
         index = _clamp(index, 0, PAGE_COUNT - 1);
         this._pageIndex = index;
-        const shift = -(this._pageWidth * index);
+        // Durante a construção e a primeira alocação do Shell ainda não há
+        // largura de página. Nunca passe NaN para Clutter: uma única
+        // translation_x inválida impede a alocação dos filhos, incluindo a
+        // textura da capa do álbum.
+        const pageWidth = Number.isFinite(this._pageWidth)
+            ? this._pageWidth
+            : 0;
+        const shift = -(pageWidth * index);
         this._pagesTrack.remove_all_transitions();
         if (animate && this._settings.get_boolean('animations')) {
             this._pagesTrack.ease({
@@ -1366,12 +1558,15 @@ class Island extends St.Widget {
      * lista — o gesto só começa onde a origem não é um desses (ver
      * _onPagePress). */
     _applyPageDrag(dx, complete) {
-        const base = -(this._pageWidth * this._pageIndex);
+        const pageWidth = Number.isFinite(this._pageWidth)
+            ? this._pageWidth
+            : 0;
+        const base = -(pageWidth * this._pageIndex);
         if (!complete) {
             // Arrasto "elástico": o track não pode sair além de meia página
             // pra cada lado, senão mostra um vazio branco além da última.
-            const clamped = _clamp(dx, -this._pageWidth * 0.5,
-                this._pageWidth * 0.5);
+            const clamped = _clamp(dx, -pageWidth * 0.5,
+                pageWidth * 0.5);
             this._pagesTrack.remove_all_transitions();
             this._pagesTrack.translation_x = base + clamped;
             return;
@@ -1397,7 +1592,7 @@ class Island extends St.Widget {
     _refit() {
         if (this._state !== 'panel' || this._revealing)
             return;
-        const w = this.width;
+        const w = this._settings.get_int('expanded-width');
         this._fitPages(w);
         let target;
         try {
@@ -1612,11 +1807,7 @@ class Island extends St.Widget {
     _updatePillMedia(info) {
         this._mediaInfo = info;
         const active = !!(info && (info.playing || info.paused));
-        if (active && this._pillMediaBtn) {
-            this._pillMediaBtn.child.icon_name = info.playing
-                ? 'media-playback-pause-symbolic'
-                : 'media-playback-start-symbolic';
-        }
+        this._setPillMediaLevels(active && !!info.playing);
         if (this._state === 'collapsed' && this._areaId === 'media') {
             this._pillClock.text = info?.title || '';
             this._refitPill();
@@ -1641,6 +1832,30 @@ class Island extends St.Widget {
     _stopMediaSpin() {
         this._mediaIcon.remove_transition('rotation-angle-z');
         this._mediaIcon.rotation_angle_z = 0;
+    }
+
+    _setPillMediaLevels(playing) {
+        if (!this._pillMediaBars)
+            return;
+        const resting = [0.45, 0.75, 0.55];
+        const peaks = [0.95, 0.5, 0.82];
+        const durations = [620, 470, 760];
+        for (let i = 0; i < this._pillMediaBars.length; i++) {
+            const bar = this._pillMediaBars[i];
+            bar.remove_all_transitions();
+            if (!playing) {
+                bar.scale_y = resting[i];
+                continue;
+            }
+            bar.scale_y = resting[i];
+            bar.ease({
+                scale_y: peaks[i],
+                duration: durations[i],
+                mode: Clutter.AnimationMode.EASE_IN_OUT_SINE,
+                autoReverse: true,
+                repeatCount: -1,
+            });
+        }
     }
 
     /* ================================================================
@@ -1727,7 +1942,8 @@ class Island extends St.Widget {
             this._pillClock.text = info.title || 'Sem mídia';
             this._pillDate.visible = false;
             this._batteryGroup.visible = false;
-            this._pillMediaBtn.visible = true;
+            this._pillMediaLevels.visible = true;
+            this._setPillMediaLevels(!!info.playing);
             this._pillDismissBtn.visible = false;
             if (art && info.playing)
                 this._startMediaSpin();
@@ -1746,7 +1962,7 @@ class Island extends St.Widget {
             this._pillClock.text = notif?.title ?? '';
             this._pillDate.visible = false;
             this._batteryGroup.visible = false;
-            this._pillMediaBtn.visible = false;
+            this._pillMediaLevels.visible = false;
             this._pillDismissBtn.visible = true;
         } else {
             this._stopMediaSpin();
@@ -1761,7 +1977,7 @@ class Island extends St.Widget {
             const showBat = !!this._battery &&
                 this._settings.get_boolean('show-battery');
             this._batteryGroup.visible = showBat;
-            this._pillMediaBtn.visible = false;
+            this._pillMediaLevels.visible = false;
             this._pillDismissBtn.visible = false;
         }
 
@@ -1924,11 +2140,7 @@ class Island extends St.Widget {
         const active = !!(info && (info.playing || info.paused));
         const wasVisible = this._mediaCard.visible;
         if (active) {
-            const art = this._resolveArt(info);
-            this._mediaArt.gicon = art ??
-                this._resolveAppIcon(info.icon) ??
-                Gio.ThemedIcon.new('multimedia-player-symbolic');
-            this._mediaArt.icon_name = '';
+            this._setPanelArtwork(info);
             this._mediaTitle.text = info.title || 'Título desconhecido';
             this._mediaArtist.text = info.artist || info.album || '';
             this._mediaArtist.visible = !!(info.artist || info.album);
@@ -1936,16 +2148,10 @@ class Island extends St.Widget {
                 info.playing
                     ? 'media-playback-pause-symbolic'
                     : 'media-playback-start-symbolic';
-            // Status confiável no lugar da (removida) barra de progresso:
-            // "Tocando"/"Pausado" lido direto do player MPRIS.
-            this._mediaStatus.text = info.playing ? 'Tocando' : 'Pausado';
-            this._mediaStatus.visible = true;
-            this._mediaOpenBtn.visible = !!info.icon;
             this._mediaCard.visible = true;
             this._mediaEmpty.visible = false;
         } else {
             this._mediaCard.visible = false;
-            this._mediaStatus.visible = false;
             this._mediaEmpty.visible = true;
         }
         if (wasVisible !== active)
@@ -2031,44 +2237,54 @@ class Island extends St.Widget {
         return null;
     }
 
-    /* "Abrir no app": lança o .desktop do player MPRIS ativo (Spotify,
-     * etc.) a partir do DesktopEntry reportado; se falhar, tenta derivar
-     * o id do nome do bus (org.mpris.MediaPlayer2.spotify -> spotify). */
-    _openMediaApp() {
-        const info = this._media.info;
-        if (!info)
-            return;
-        const tryLaunch = (id) => {
-            if (!id)
-                return false;
-            try {
-                const app = Gio.DesktopAppInfo.new(`${id}.desktop`);
-                if (app?.get_id()) {
-                    app.launch();
-                    return true;
-                }
-            } catch (_) {}
-            return false;
-        };
-        const opened = tryLaunch(info.icon) || tryLaunch(
-            (info.bus ?? '').startsWith('org.mpris.MediaPlayer2.')
-                ? info.bus.slice('org.mpris.MediaPlayer2.'.length)
-                : '');
-        if (opened)
-            this._showCollapsed();
-    }
-
     _resolveArt(info) {
-        // Igual ao js/ui/messageList.js do próprio GNOME Shell: passa a
-        // URI direto pro GIO (via GVfs), que resolve tanto file:// quanto
-        // http(s):// (o Spotify, por exemplo, manda a capa via CDN
-        // https://). Antes só tratávamos file://, então a capa de álbuns
-        // do Spotify nunca aparecia — caía sempre no ícone do app.
+        // Mesmo caminho usado pelo banner de início de mídia: St.Icon
+        // recebe o Gio.FileIcon diretamente.
         try {
             if (info?.artUrl)
                 return Gio.FileIcon.new(Gio.File.new_for_uri(info.artUrl));
         } catch (_) {}
         return null;
+    }
+
+    /* A guarda é essencial porque MediaWatcher emite changed
+     * periodicamente; sem ela, a textura seria recarregada e piscaria a
+     * cada atualização do player. */
+    _setPanelArtwork(info) {
+        const artworkKey = `${info?.artUrl ?? ''}\u0000${info?.icon ?? ''}`;
+        if (this._panelArtworkKey === artworkKey)
+            return;
+        this._panelArtworkKey = artworkKey;
+
+        this._mediaArt.destroy_all_children();
+        if (!info?.artUrl) {
+            this._mediaArt.add_child(new St.Icon({
+                icon_size: 80,
+                gicon: this._resolveAppIcon(info?.icon) ??
+                    Gio.ThemedIcon.new('multimedia-player-symbolic'),
+                x_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+            return;
+        }
+
+        try {
+            const cache = St.TextureCache.get_default();
+            const texture = info.artUrl.startsWith('file://')
+                ? cache.load_file_async(
+                    Gio.File.new_for_uri(info.artUrl), 80, 80, 1, 1)
+                // Spotify e vários outros players publicam uma URL https;
+                // load_file_async só entende arquivos locais e a deixava
+                // vazia. O carregador de URI é o caminho do Shell para arte
+                // remota MPRIS.
+                : cache.load_uri_async(info.artUrl, 80, 80, 1, 1);
+            texture.set_size(80, 80);
+            texture.x_align = Clutter.ActorAlign.CENTER;
+            texture.y_align = Clutter.ActorAlign.CENTER;
+            this._mediaArt.add_child(texture);
+        } catch (error) {
+            console.warn(`[dynamic-island] Não foi possível carregar a capa: ${error.message}`);
+        }
     }
 
     /* ================================================================
@@ -2080,13 +2296,13 @@ class Island extends St.Widget {
             return;
         if (this._isDnd()) {
             if (this._state === 'panel')
-                this._updatePanelNotifs();
+                this._queuePanelNotifsRefresh();
             return;
         }
         if (this._state === 'panel') {
             // Painel já aberto: a notificação já aparece ao vivo na
             // lista rolável, não precisa de peek — não entra na fila.
-            this._updatePanelNotifs();
+            this._queuePanelNotifsRefresh();
             return;
         }
         this._updatePillNotifs();
@@ -2336,6 +2552,22 @@ class Island extends St.Widget {
         this._refit();
     }
 
+    /* Uma rajada pode conter dezenas de sinais no mesmo ciclo do Shell.
+     * Agrupamos a reconstrução da lista em uma única atualização curta:
+     * isso evita destruir/recriar atores e recalcular layout dezenas de
+     * vezes, mas mantém o painel atualizado em no máximo 80 ms. */
+    _queuePanelNotifsRefresh() {
+        if (this._notifRefreshId)
+            return;
+        this._notifRefreshId = GLib.timeout_add(GLib.PRIORITY_DEFAULT,
+            NOTIF_REFRESH_DELAY_MS, () => {
+                this._notifRefreshId = 0;
+                if (this._state === 'panel')
+                    this._updatePanelNotifs();
+                return GLib.SOURCE_REMOVE;
+            });
+    }
+
     _buildNotifRow(notif) {
         const row = new St.Button({
             style_class: 'island-notif-row',
@@ -2365,6 +2597,9 @@ class Island extends St.Widget {
             style_class: 'island-notif-app',
             x_expand: true,
         });
+        appName.clutter_text.line_wrap = true;
+        appName.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
+        appName.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
         const time = new St.Label({
             text: this._formatTime(notif.datetime ?? new Date()),
             style_class: 'island-notif-time',
@@ -2381,8 +2616,9 @@ class Island extends St.Widget {
         // Quebra em várias linhas em vez de truncar com "..." — a lista
         // agora rola dentro do próprio contêiner, então o título tem
         // espaço de sobra pra aparecer inteiro em vez de cortado.
-        title.clutter_text.line_wrap = true;
-        title.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
+        title.clutter_text.set_line_wrap(true);
+        title.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+        title.clutter_text.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR);
         text.add_child(meta);
         text.add_child(title);
 
@@ -2652,8 +2888,17 @@ class Island extends St.Widget {
             if (this._state === 'panel')
                 this._updatePanelContent();
         } else if (key === 'expanded-width') {
-            if (this._state === 'panel')
-                this._showPanel();
+            if (this._state === 'panel') {
+                const w = this._settings.get_int('expanded-width');
+                this._fitPages(w);
+                this._positionTrack(this._pageIndex, false);
+                try {
+                    const [, naturalHeight] = this._panel.get_preferred_height(w);
+                    this._animateSize(w,
+                        _clamp(naturalHeight + 8, 200, this._maxHeight()),
+                        false);
+                } catch (_) {}
+            }
         } else if (key === 'corner-radius') {
             this._applyShape();
         } else if (key === 'collapsed-height') {
