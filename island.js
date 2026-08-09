@@ -13,9 +13,8 @@ import {MediaWatcher} from './modules/media.js';
 import {NotificationManager} from './modules/notifications.js';
 import {NotifQueue} from './modules/notifQueue.js';
 
-const EXPAND_DURATION = 420;
-const COLLAPSE_DURATION = 300;
-const FADE_DURATION = 200;
+import {Animator, TIMING, MODES} from './core/animator.js';
+
 const STARTUP_GRACE_MS = 3000;
 const PILL_MIN_WIDTH = 210;
 const SWIPE_THRESHOLD = 36;
@@ -76,6 +75,9 @@ class Island extends St.Widget {
 
         this._extension = extension;
         this._settings = extension.getSettings();
+        this._animator = new Animator({
+            enabled: this._settings.get_boolean('animations'),
+        });
         this._state = 'collapsed';
         this._bannerTimer = 0;
         this._captureId = 0;
@@ -1204,51 +1206,46 @@ class Island extends St.Widget {
      * camada usa opacidade + um leve deslocamento vertical. */
 
     _animateSize(w, h, spring) {
-        if (!this._settings.get_boolean('animations')) {
-            this.set_size(w, h);
-            return;
-        }
-        this.remove_all_transitions();
-        this.ease({
+        this._animator.animate(this, {
             width: w,
             height: h,
-            duration: spring ? EXPAND_DURATION : COLLAPSE_DURATION,
-            mode: spring
-                ? Clutter.AnimationMode.EASE_OUT_QUINT
-                : Clutter.AnimationMode.EASE_IN_OUT_QUAD,
+        }, {
+            duration: spring ? TIMING.expand : TIMING.collapse,
+            mode: spring ? MODES.easeOutQuint : MODES.easeInOutQuad,
         });
     }
 
     _swapLayers(show) {
-        const anim = this._settings.get_boolean('animations');
+        const anim = this._animator.enabled;
         const layers = {
             pill: this._pill,
             banner: this._banner,
             panel: this._panel,
         };
         for (const [name, layer] of Object.entries(layers)) {
-            layer.remove_all_transitions();
             if (name === show) {
                 layer.visible = true;
                 if (anim && layer.opacity < 255) {
                     layer.translation_y = -5;
-                    layer.ease({
+                    this._animator.animate(layer, {
                         opacity: 255,
                         translation_y: 0,
-                        delay: 110,
-                        duration: FADE_DURATION + 80,
-                        mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                    }, {
+                        delay: TIMING.swapLayerDelay,
+                        duration: TIMING.swapLayerFade,
+                        mode: MODES.easeOutQuad,
                     });
                 } else {
                     layer.opacity = 255;
                     layer.translation_y = 0;
                 }
             } else {
-                layer.ease({
+                this._animator.animate(layer, {
                     opacity: 0,
                     translation_y: -3,
-                    duration: anim ? FADE_DURATION : 0,
-                    mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                }, {
+                    duration: anim ? TIMING.fade : 0,
+                    mode: MODES.easeOutQuad,
                     onComplete: () => {
                         if (this._state !== name)
                             layer.visible = false;
@@ -1485,16 +1482,14 @@ class Island extends St.Widget {
             ? this._pageWidth
             : 0;
         const shift = -(pageWidth * index);
-        this._pagesTrack.remove_all_transitions();
-        if (animate && this._settings.get_boolean('animations')) {
-            this._pagesTrack.ease({
-                translation_x: shift,
-                duration: 220,
-                mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
-            });
-        } else {
-            this._pagesTrack.translation_x = shift;
-        }
+        this._animator.animate(this._pagesTrack, {
+            translation_x: shift,
+        }, {
+            duration: animate && this._animator.enabled
+                ? TIMING.pageSwipe
+                : 0,
+            mode: MODES.easeOutCubic,
+        });
         for (let i = 0; i < PAGE_COUNT; i++) {
             const dot = this._pageDots[i];
             dot.checked = i === index;
@@ -1602,16 +1597,12 @@ class Island extends St.Widget {
             return;
         }
         if (Math.abs(this.height - target) > 3) {
-            if (this._settings.get_boolean('animations')) {
-                this.remove_all_transitions();
-                this.ease({
-                    height: target,
-                    duration: 340,
-                    mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
-                });
-            } else {
-                this.height = target;
-            }
+            this._animator.animate(this, {
+                height: target,
+            }, {
+                duration: TIMING.panelRefit,
+                mode: MODES.easeOutCubic,
+            });
         }
     }
 
@@ -1820,17 +1811,16 @@ class Island extends St.Widget {
         if (this._mediaIcon.get_transition('rotation-angle-z'))
             return;
         this._mediaIcon.set_pivot_point(0.5, 0.5);
-        this._mediaIcon.remove_all_transitions();
-        this._mediaIcon.ease({
+        this._animator.loop(this._mediaIcon, {
             rotation_angle_z: 360,
-            duration: 8000,
-            mode: Clutter.AnimationMode.LINEAR,
+            duration: TIMING.mediaSpin,
+            mode: MODES.linear,
             repeatCount: -1,
         });
     }
 
     _stopMediaSpin() {
-        this._mediaIcon.remove_transition('rotation-angle-z');
+        this._animator.stop(this._mediaIcon, 'rotation-angle-z');
         this._mediaIcon.rotation_angle_z = 0;
     }
 
@@ -1842,16 +1832,16 @@ class Island extends St.Widget {
         const durations = [620, 470, 760];
         for (let i = 0; i < this._pillMediaBars.length; i++) {
             const bar = this._pillMediaBars[i];
-            bar.remove_all_transitions();
             if (!playing) {
+                this._animator.clear(bar);
                 bar.scale_y = resting[i];
                 continue;
             }
             bar.scale_y = resting[i];
-            bar.ease({
+            this._animator.loop(bar, {
                 scale_y: peaks[i],
                 duration: durations[i],
-                mode: Clutter.AnimationMode.EASE_IN_OUT_SINE,
+                mode: MODES.easeInOutSine,
                 autoReverse: true,
                 repeatCount: -1,
             });
@@ -1985,14 +1975,15 @@ class Island extends St.Widget {
 
         if (dir) {
             const content = this._pillBox;
-            content.remove_all_transitions();
-            content.translation_x = dir * 22;
-            content.opacity = 0;
-            content.ease({
+            this._animator.animate(content, {
                 translation_x: 0,
                 opacity: 255,
-                duration: 320,
-                mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            }, {
+                duration: this._animator.enabled
+                    ? TIMING.areaSwap
+                    : 0,
+                mode: MODES.easeOutCubic,
+                initial: {translation_x: dir * 22, opacity: 0},
             });
         }
 
@@ -2383,26 +2374,27 @@ class Island extends St.Widget {
             this._animateSize(width, h, true);
         };
 
-        if (!this._settings.get_boolean('animations')) {
+        if (!this._animator.enabled) {
             swap();
             after();
             return;
         }
 
-        this._bannerBin.remove_all_transitions();
-        this._bannerBin.ease({
+        this._animator.animate(this._bannerBin, {
             opacity: 0,
             translation_x: -16,
-            duration: 140,
-            mode: Clutter.AnimationMode.EASE_IN_QUAD,
+        }, {
+            duration: TIMING.crossfadeOut,
+            mode: MODES.easeInQuad,
             onComplete: () => {
                 swap();
                 this._bannerBin.translation_x = 16;
-                this._bannerBin.ease({
+                this._animator.animate(this._bannerBin, {
                     opacity: 255,
                     translation_x: 0,
-                    duration: 220,
-                    mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                }, {
+                    duration: TIMING.crossfadeIn,
+                    mode: MODES.easeOutQuad,
                 });
                 after();
             },
@@ -2753,17 +2745,13 @@ class Island extends St.Widget {
         const w = this._measurePillWidth();
         const h = this._settings.get_int('collapsed-height');
         if (Math.abs(this.width - w) > 3 || Math.abs(this.height - h) > 3) {
-            if (this._settings.get_boolean('animations')) {
-                this.remove_all_transitions();
-                this.ease({
-                    width: w,
-                    height: h,
-                    duration: 480,
-                    mode: Clutter.AnimationMode.EASE_OUT_QUINT,
-                });
-            } else {
-                this.set_size(w, h);
-            }
+            this._animator.animate(this, {
+                width: w,
+                height: h,
+            }, {
+                duration: TIMING.pillRefit,
+                mode: MODES.easeOutQuint,
+            });
         }
     }
 
@@ -2879,7 +2867,10 @@ class Island extends St.Widget {
     }
 
     _onSettingChanged(key) {
-        if (key === 'accent-color') {
+        if (key === 'animations') {
+            this._animator.setEnabled(
+                this._settings.get_boolean('animations'));
+        } else if (key === 'accent-color') {
             this._applyAccent();
         } else if (key === 'show-controls') {
             if (this._state === 'panel')
