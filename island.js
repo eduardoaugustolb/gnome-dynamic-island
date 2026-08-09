@@ -14,6 +14,19 @@ import {NotificationManager} from './modules/notifications.js';
 import {NotifQueue} from './modules/notifQueue.js';
 
 import {Animator, TIMING, MODES} from './core/animator.js';
+import {
+    clamp,
+    clampPillWidth,
+    maxPanelHeight,
+    panelInnerWidth,
+    carouselTrackWidth,
+    pageShift,
+    panelChromeHeight,
+    maxPageHeight,
+    clampPageHeight,
+    panelTargetHeight,
+    controlCellWidth,
+} from './core/layout.js';
 
 const STARTUP_GRACE_MS = 3000;
 const PILL_MIN_WIDTH = 210;
@@ -42,9 +55,6 @@ const SYSTEM_ACCENTS = {
     yellow: '#c88800', orange: '#ed5b00', red: '#e62d42',
     pink: '#d56199', purple: '#9141ac', slate: '#6f8396',
 };
-
-const _clamp = (value, min, max) =>
-    Math.min(max, Math.max(min, value));
 
 const TOGGLES = [
     {name: 'wifi', label: 'Wi-Fi', icon: 'network-wireless-symbolic'},
@@ -1265,23 +1275,19 @@ class Island extends St.Widget {
             // cap antigo era um max-width fixo de 480px no CSS, que
             // quebrava em monitores pequenos.
             const monitor = Main.layoutManager.primaryMonitor;
-            const cap = monitor
-                ? Math.max(PILL_MIN_WIDTH, Math.round(monitor.width * 0.45))
-                : 560;
-            return _clamp(natW, PILL_MIN_WIDTH, cap);
+            return clampPillWidth(natW, PILL_MIN_WIDTH, monitor?.width ?? 0);
         } catch (_) {
             return PILL_MIN_WIDTH;
         }
     }
 
     _maxHeight() {
-        const monitor = Main.layoutManager.primaryMonitor;
         // O painel nunca deve ultrapassar a viewport: reserva 8px do topo
         // (gap da ilha) + uma margem inferior de 40px. Em telas baixas
         // isso encolhe o teto automaticamente; o excesso é absorvido pela
         // lista de notificações, que rola internamente.
-        const avail = monitor ? monitor.height - 48 : 700;
-        return Math.max(240, Math.min(560, avail));
+        const monitor = Main.layoutManager.primaryMonitor;
+        return maxPanelHeight(monitor?.height ?? null);
     }
 
     _showCollapsed() {
@@ -1316,7 +1322,7 @@ class Island extends St.Widget {
         let h;
         try {
             const [, natH] = this._banner.get_preferred_height(w);
-            h = _clamp(natH, opts.minH ?? 96, opts.maxH ?? 240);
+            h = clamp(natH, opts.minH ?? 96, opts.maxH ?? 240);
         } catch (_) {
             h = opts.minH ?? 120;
         }
@@ -1353,7 +1359,7 @@ class Island extends St.Widget {
         let h;
         try {
             const [, natH] = this._panel.get_preferred_height(w);
-            h = _clamp(natH + 8, 200, this._maxHeight());
+            h = panelTargetHeight(natH, this._maxHeight());
         } catch (_) {
             h = 320;
         }
@@ -1379,12 +1385,12 @@ class Island extends St.Widget {
         // a largura-alvo estável; o parâmetro existe só para a abertura e
         // mudanças explícitas de preferência.
         const w = width ?? this._settings.get_int('expanded-width');
-        const inner = Math.max(0, w - 32);
+        const inner = panelInnerWidth(w);
         this._pageWidth = inner;
         // Cada página tem a largura exata do viewport (e o track, PAGE_COUNT
         // vezes ela): o deslize anda de "página" em "página" com largura
         // fixa, não pela largura natural de cada conteúdo.
-        this._pagesTrack.width = inner * PAGE_COUNT;
+        this._pagesTrack.width = carouselTrackWidth(inner, PAGE_COUNT);
         for (const page of this._pages)
             page.width = inner;
         this._fitPageLabels(inner);
@@ -1408,9 +1414,9 @@ class Island extends St.Widget {
         try { [, indicatorsH] = this._pageIndicators.get_preferred_height(inner); } catch (_) {}
         // 32px de padding vertical do painel + dois espaços de 16px entre
         // header/páginas/indicadores (valores de .island-panel no CSS).
-        const panelChrome = headerH + indicatorsH + 64;
-        const maxPageH = Math.max(96, this._maxHeight() - panelChrome);
-        pageH = _clamp(pageH, 96, maxPageH);
+        const panelChrome = panelChromeHeight(headerH, indicatorsH);
+        const maxPageH = maxPageHeight(this._maxHeight(), panelChrome);
+        pageH = clampPageHeight(pageH, maxPageH);
         if (this._pagesViewport.height !== pageH)
             this._pagesViewport.height = pageH;
         this._positionTrack(this._pageIndex, false);
@@ -1424,9 +1430,10 @@ class Island extends St.Widget {
     _fitControlGrid(width) {
         if (!this._toggleRows || !this._powerRow)
             return;
-        const cellWidth = Math.max(1, Math.floor(
-            (width - CONTROL_GRID_GAP * (CONTROL_GRID_COLUMNS - 1)) /
-            CONTROL_GRID_COLUMNS));
+        const cellWidth = controlCellWidth(width, {
+            columns: CONTROL_GRID_COLUMNS,
+            gap: CONTROL_GRID_GAP,
+        });
         const fitRow = row => {
             row.width = width;
             for (const child of row.get_children()) {
@@ -1472,7 +1479,7 @@ class Island extends St.Widget {
     _positionTrack(index, animate = true) {
         if (!this._pagesTrack)
             return;
-        index = _clamp(index, 0, PAGE_COUNT - 1);
+        index = clamp(index, 0, PAGE_COUNT - 1);
         this._pageIndex = index;
         // Durante a construção e a primeira alocação do Shell ainda não há
         // largura de página. Nunca passe NaN para Clutter: uma única
@@ -1481,7 +1488,7 @@ class Island extends St.Widget {
         const pageWidth = Number.isFinite(this._pageWidth)
             ? this._pageWidth
             : 0;
-        const shift = -(pageWidth * index);
+        const shift = pageShift(pageWidth, index);
         this._animator.animate(this._pagesTrack, {
             translation_x: shift,
         }, {
@@ -1556,11 +1563,11 @@ class Island extends St.Widget {
         const pageWidth = Number.isFinite(this._pageWidth)
             ? this._pageWidth
             : 0;
-        const base = -(pageWidth * this._pageIndex);
+        const base = pageShift(pageWidth, this._pageIndex);
         if (!complete) {
             // Arrasto "elástico": o track não pode sair além de meia página
             // pra cada lado, senão mostra um vazio branco além da última.
-            const clamped = _clamp(dx, -pageWidth * 0.5,
+            const clamped = clamp(dx, -pageWidth * 0.5,
                 pageWidth * 0.5);
             this._pagesTrack.remove_all_transitions();
             this._pagesTrack.translation_x = base + clamped;
@@ -1592,7 +1599,7 @@ class Island extends St.Widget {
         let target;
         try {
             const [, natH] = this._panel.get_preferred_height(w);
-            target = _clamp(natH + 8, 200, this._maxHeight());
+            target = panelTargetHeight(natH, this._maxHeight());
         } catch (_) {
             return;
         }
@@ -2355,7 +2362,7 @@ class Island extends St.Widget {
             natW = 320;
         }
         const cap = Math.min(this._settings.get_int('expanded-width'), 440);
-        return _clamp(natW, 240, cap);
+        return clamp(natW, 240, cap);
     }
 
     /* Faz o conteúdo atual do banner "sair" (fade + leve deslizamento)
@@ -2367,7 +2374,7 @@ class Island extends St.Widget {
             let h;
             try {
                 const [, natH] = this._banner.get_preferred_height(width);
-                h = _clamp(natH, 96, 240);
+                h = clamp(natH, 96, 240);
             } catch (_) {
                 h = 120;
             }
@@ -2723,7 +2730,7 @@ class Island extends St.Widget {
             return;
         }
         const {percent, charging, full} = battery;
-        const level = 10 * Math.floor(_clamp(percent, 0, 100) / 10);
+        const level = 10 * Math.floor(clamp(percent, 0, 100) / 10);
         let icon;
         if (full)
             icon = 'battery-level-100-charged-symbolic';
@@ -2886,7 +2893,7 @@ class Island extends St.Widget {
                 try {
                     const [, naturalHeight] = this._panel.get_preferred_height(w);
                     this._animateSize(w,
-                        _clamp(naturalHeight + 8, 200, this._maxHeight()),
+                        panelTargetHeight(naturalHeight, this._maxHeight()),
                         false);
                 } catch (_) {}
             }

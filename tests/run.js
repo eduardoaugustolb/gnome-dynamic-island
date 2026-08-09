@@ -18,12 +18,14 @@ import {tests as notifQueueTests} from './notifQueue.test.js';
 import {tests as mediaTests} from './media.test.js';
 import {tests as notificationsTests} from './notifications.test.js';
 import {tests as integrationTests} from './integration.test.js';
+import {tests as layoutTests} from './layout.test.js';
 
 const suites = [
     ['notifQueue.js (fila de amostragem)', notifQueueTests],
     ['media.js (MediaWatcher/MPRIS)', mediaTests],
     ['notifications.js (NotificationManager)', notificationsTests],
     ['integração: NotificationManager + NotifQueue', integrationTests],
+    ['core/layout.js (geometria da ilha)', layoutTests],
 ];
 
 let passed = 0;
