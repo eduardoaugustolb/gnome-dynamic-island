@@ -27,6 +27,7 @@ import {
     panelTargetHeight,
     controlCellWidth,
 } from './core/layout.js';
+import {UiState} from './core/uiState.js';
 
 const STARTUP_GRACE_MS = 3000;
 const PILL_MIN_WIDTH = 210;
@@ -88,7 +89,7 @@ class Island extends St.Widget {
         this._animator = new Animator({
             enabled: this._settings.get_boolean('animations'),
         });
-        this._state = 'collapsed';
+        this._uiState = new UiState('collapsed');
         this._bannerTimer = 0;
         this._captureId = 0;
         this._notifQueue = new NotifQueue();
@@ -1201,8 +1202,23 @@ class Island extends St.Widget {
      * Estado e animações
      * ================================================================ */
 
+    /* O estado de camada é uma máquina (core/uiState.js): esta getter
+     * mantém os ~20 pontos de leitura de `this._state` funcionando
+     * enquanto o orquestrador não assume (fase 7); as ESCRITAS passam
+     * sempre por _setState, que valida a transição. */
+    get _state() {
+        return this._uiState.value;
+    }
+
+    _setState(next) {
+        if (!this._uiState.set(next)) {
+            log(`dynamic-island: transição de estado inválida ` +
+                `'${this._uiState.value}' → '${next}' ignorada`);
+        }
+    }
+
     get expanded() {
-        return this._state !== 'collapsed';
+        return this._uiState.expanded;
     }
 
     collapse() {
@@ -1294,7 +1310,7 @@ class Island extends St.Widget {
         this._clearBannerTimer();
         this._bannerAction = null;
         this._bannerKind = null;
-        this._state = 'collapsed';
+        this._setState('collapsed');
         this._endPageDrag();
         const areas = this._availableAreas();
         if (!areas.includes(this._areaId))
@@ -1314,7 +1330,7 @@ class Island extends St.Widget {
 
     _showBanner(opts) {
         this._clearBannerTimer();
-        this._state = 'banner';
+        this._setState('banner');
         this._bannerAction = opts.action ?? null;
         this._bannerBin.set_child(opts.child ?? null);
         const w = opts.width ?? 480;
@@ -1340,7 +1356,7 @@ class Island extends St.Widget {
         this._clearBannerTimer();
         this._bannerAction = null;
         this._bannerKind = null;
-        this._state = 'panel';
+        this._setState('panel');
         // _updatePanelContent() pode alternar a visibilidade dos cards,
         // o que dispara _syncPages/_refit internamente. Nós já vamos medir
         // e animar para o tamanho final logo abaixo, então esse trabalho
