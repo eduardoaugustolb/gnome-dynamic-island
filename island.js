@@ -28,6 +28,7 @@ import {
     controlCellWidth,
 } from './core/layout.js';
 import {UiState} from './core/uiState.js';
+import {Banner} from './components/Banner.js';
 
 const STARTUP_GRACE_MS = 3000;
 const PILL_MIN_WIDTH = 210;
@@ -90,11 +91,9 @@ class Island extends St.Widget {
             enabled: this._settings.get_boolean('animations'),
         });
         this._uiState = new UiState('collapsed');
-        this._bannerTimer = 0;
         this._captureId = 0;
         this._notifQueue = new NotifQueue();
         this._bannerKind = null;
-        this._bannerAction = null;
         this._bannerHover = false;
         this._bannerCount = 0;
         this._volumeDragging = false;
@@ -142,7 +141,21 @@ class Island extends St.Widget {
         this.add_child(this._colorProbe);
 
         this._buildPill();
-        this._buildBanner();
+        this._banner = new Banner(this._animator, {
+            onActivate: (action) => {
+                this._showCollapsed();
+                if (action)
+                    action();
+            },
+            onHoverChange: (hover) => {
+                this._bannerHover = hover;
+                if (hover)
+                    this._banner.cancelCollapse();
+                else if (this._state === 'banner')
+                    this._scheduleBannerCollapse();
+            },
+        });
+        this.add_child(this._banner);
         this._buildPanel();
 
         this._applyAccent();
@@ -447,44 +460,6 @@ class Island extends St.Widget {
         });
 
         this.add_child(this._pill);
-    }
-
-    _buildBanner() {
-        this._banner = new St.Widget({
-            style_class: 'island-banner',
-            reactive: true,
-            track_hover: true,
-            can_focus: true,
-            clip_to_allocation: true,
-            visible: false,
-            opacity: 0,
-            x_align: Clutter.ActorAlign.FILL,
-            y_align: Clutter.ActorAlign.START,
-            x_expand: true,
-            layout_manager: new Clutter.BinLayout(),
-        });
-        this._bannerBin = new St.Bin({x_expand: true, y_expand: true});
-        this._banner.add_child(this._bannerBin);
-
-        this._banner.connect('button-press-event', (_a, event) => {
-            if (event.get_button() !== 1)
-                return Clutter.EVENT_PROPAGATE;
-            const action = this._bannerAction;
-            this._bannerAction = null;
-            this._showCollapsed();
-            if (action)
-                action();
-            return Clutter.EVENT_STOP;
-        });
-        this._banner.connect('notify::hover', () => {
-            this._bannerHover = this._banner.hover;
-            if (this._bannerHover)
-                this._clearBannerTimer();
-            else if (this._state === 'banner')
-                this._scheduleBannerCollapse();
-        });
-
-        this.add_child(this._banner);
     }
 
     _buildPanel() {
@@ -1308,7 +1283,7 @@ class Island extends St.Widget {
 
     _showCollapsed() {
         this._clearBannerTimer();
-        this._bannerAction = null;
+        this._banner.clearAction();
         this._bannerKind = null;
         this._setState('collapsed');
         this._endPageDrag();
@@ -1331,17 +1306,10 @@ class Island extends St.Widget {
     _showBanner(opts) {
         this._clearBannerTimer();
         this._setState('banner');
-        this._bannerAction = opts.action ?? null;
-        this._bannerBin.set_child(opts.child ?? null);
+        this._banner.setAction(opts.action ?? null);
         const w = opts.width ?? 480;
-        this._banner.visible = true;
-        let h;
-        try {
-            const [, natH] = this._banner.get_preferred_height(w);
-            h = clamp(natH, opts.minH ?? 96, opts.maxH ?? 240);
-        } catch (_) {
-            h = opts.minH ?? 120;
-        }
+        const h = this._banner.show(opts.child ?? null, w,
+            opts.minH ?? 96, opts.maxH ?? 240);
         this._animateSize(w, h, true);
         this._swapLayers('banner');
         if (!opts.persist)
@@ -1354,7 +1322,7 @@ class Island extends St.Widget {
         if (this._state === 'panel')
             return;
         this._clearBannerTimer();
-        this._bannerAction = null;
+        this._banner.clearAction();
         this._bannerKind = null;
         this._setState('panel');
         // _updatePanelContent() pode alternar a visibilidade dos cards,
@@ -1692,26 +1660,20 @@ class Island extends St.Widget {
     /* ---------- Timer de banner ---------- */
 
     _scheduleBannerCollapse(ms = this._settings.get_int('peek-duration')) {
-        this._clearBannerTimer();
-        this._bannerTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
-            this._bannerTimer = 0;
+        this._banner.scheduleCollapse(ms, () => {
             if (this._state !== 'banner' || this._bannerHover)
-                return GLib.SOURCE_REMOVE;
+                return;
             // Ainda tem notificação esperando: troca de conteúdo em vez
             // de recolher e reabrir (ver _pumpNotifQueue/_presentNotifBanner).
             if (this._bannerKind === 'notif' && this._notifQueue.size > 0)
                 this._pumpNotifQueue();
             else
                 this._showCollapsed();
-            return GLib.SOURCE_REMOVE;
         });
     }
 
     _clearBannerTimer() {
-        if (this._bannerTimer) {
-            GLib.source_remove(this._bannerTimer);
-            this._bannerTimer = 0;
-        }
+        this._banner?.cancelCollapse();
     }
 
     /* ================================================================
@@ -2236,7 +2198,7 @@ class Island extends St.Widget {
     }
 
     _consumeBannerClick(callback) {
-        this._bannerAction = null;
+        this._banner.clearAction();
         callback();
     }
 
@@ -2330,9 +2292,9 @@ class Island extends St.Widget {
     /* Orquestra a amostragem sequencial das notificações: mostra uma de
      * cada vez, na ordem de chegada. Avança quando a ilha volta a ficar
      * ociosa (ver _showCollapsed) OU, se já tem outro peek de
-     * notificação na tela, troca o conteúdo no lugar (crossfade — ver
-     * _crossfadeBannerContent) em vez de esperar recolher e reabrir.
-     * Nenhuma notificação empilhada aqui é descartada. */
+     * notificação na tela, troca o conteúdo no lugar (crossfade do
+     * Banner) em vez de esperar recolher e reabrir. Nenhuma notificação
+     * empilhada aqui é descartada. */
     _pumpNotifQueue() {
         const safeToAdvance = this._state === 'collapsed' ||
             (this._state === 'banner' && this._bannerKind === 'notif');
@@ -2357,8 +2319,9 @@ class Island extends St.Widget {
         const action = () => this._activateNotif(notif);
 
         if (this._state === 'banner' && this._bannerKind === 'notif') {
-            this._bannerAction = action;
-            this._crossfadeBannerContent(child, width,
+            this._banner.setAction(action);
+            this._banner.crossfade(child, width,
+                (h) => this._animateSize(width, h, true),
                 () => this._scheduleBannerCollapse(dwell));
         } else {
             this._bannerKind = 'notif';
@@ -2379,49 +2342,6 @@ class Island extends St.Widget {
         }
         const cap = Math.min(this._settings.get_int('expanded-width'), 440);
         return clamp(natW, 240, cap);
-    }
-
-    /* Faz o conteúdo atual do banner "sair" (fade + leve deslizamento)
-     * e o próximo "entrar" no lugar, sem recolher a ilha entre os dois
-     * — usado quando várias notificações se acumulam na fila. */
-    _crossfadeBannerContent(child, width, after) {
-        const swap = () => {
-            this._bannerBin.set_child(child);
-            let h;
-            try {
-                const [, natH] = this._banner.get_preferred_height(width);
-                h = clamp(natH, 96, 240);
-            } catch (_) {
-                h = 120;
-            }
-            this._animateSize(width, h, true);
-        };
-
-        if (!this._animator.enabled) {
-            swap();
-            after();
-            return;
-        }
-
-        this._animator.animate(this._bannerBin, {
-            opacity: 0,
-            translation_x: -16,
-        }, {
-            duration: TIMING.crossfadeOut,
-            mode: MODES.easeInQuad,
-            onComplete: () => {
-                swap();
-                this._bannerBin.translation_x = 16;
-                this._animator.animate(this._bannerBin, {
-                    opacity: 255,
-                    translation_x: 0,
-                }, {
-                    duration: TIMING.crossfadeIn,
-                    mode: MODES.easeOutQuad,
-                });
-                after();
-            },
-        });
     }
 
     _isDnd() {
@@ -2498,7 +2418,6 @@ class Island extends St.Widget {
             accessible_name: 'Dispensar',
         });
         dismiss.connect('clicked', () => {
-            this._bannerAction = null;
             this._showCollapsed();
         });
 
