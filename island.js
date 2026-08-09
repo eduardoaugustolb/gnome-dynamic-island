@@ -29,6 +29,7 @@ import {
 } from './core/layout.js';
 import {UiState} from './core/uiState.js';
 import {Banner} from './components/Banner.js';
+import {Pill} from './components/Pill.js';
 
 const STARTUP_GRACE_MS = 3000;
 const PILL_MIN_WIDTH = 210;
@@ -214,10 +215,9 @@ class Island extends St.Widget {
 
         // O evento normalmente chega na própria pill (o ator sob o cursor),
         // não necessariamente no contêiner raiz. Mantemos também o fallback
-        // no raiz para temas/atores filhos que o propaguem diretamente.
+        // no raiz para temas/atores filhos que o propaguem diretamente. (A
+        // Pill já conecta o próprio scroll-event e o repassa via callback.)
         this.connect('scroll-event', (_a, event) => this._onPillScroll(event));
-        this._pill.connect('scroll-event',
-            (_a, event) => this._onPillScroll(event));
 
         this.connect('notify::allocation', () => {
             if (this._pendingSize) {
@@ -318,147 +318,11 @@ class Island extends St.Widget {
     }
 
     _buildPill() {
-        const box = new St.BoxLayout({
-            style_class: 'island-pill-content',
-            vertical: false,
-            x_align: Clutter.ActorAlign.FILL,
-            y_align: Clutter.ActorAlign.FILL,
+        this._pill = new Pill(this._animator, {
+            onScroll: (event) => this._onPillScroll(event),
+            onPress: (event) => this._onPillPress(event),
+            onDismiss: () => this._showCollapsed(),
         });
-
-        this._pillLeft = new St.BoxLayout({
-            style_class: 'island-pill-side',
-            vertical: false,
-            x_expand: true,
-            x_align: Clutter.ActorAlign.START,
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        this._mediaIcon = new St.Icon({
-            style_class: 'island-pill-icon',
-            icon_size: 16,
-            visible: false,
-        });
-        this._pillLeft.add_child(this._mediaIcon);
-
-        this._pillClock = new St.Label({
-            style_class: 'island-clock',
-            x_align: Clutter.ActorAlign.CENTER,
-            y_align: Clutter.ActorAlign.CENTER,
-            x_expand: true,
-            text: '',
-        });
-
-        this._pillRight = new St.BoxLayout({
-            style_class: 'island-pill-side',
-            vertical: false,
-            x_expand: true,
-            x_align: Clutter.ActorAlign.END,
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        /* Ícone + percentual formam UM componente (o "indicador de
-         * bateria"), com espaçamento interno bem menor que o espaço
-         * entre componentes — para não parecerem dois elementos soltos
-         * tão separados quanto bateria↔data. */
-        this._batteryGroup = new St.BoxLayout({
-            style_class: 'island-battery-group',
-            vertical: false,
-            visible: false,
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        this._batteryIcon = new St.Icon({
-            style_class: 'island-pill-icon',
-            icon_size: 16,
-        });
-        this._batteryLabel = new St.Label({
-            style_class: 'island-pill-battery',
-            text: '',
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        this._batteryGroup.add_child(this._batteryIcon);
-        this._batteryGroup.add_child(this._batteryLabel);
-        this._pillDate = new St.Label({
-            style_class: 'island-pill-date',
-            text: '',
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        /* Data no lado ESQUERDO, bateria no DIREITO: espelha os pesos e
-         * mantém o horário centrado de verdade na pill (com a data à
-         * direita junto da bateria, o lado direito ficava ~50px mais
-         * pesado e a hora deslocava pra esquerda do centro óptico). */
-        this._pillLeft.add_child(this._pillDate);
-        this._pillRight.add_child(this._batteryGroup);
-
-        // Indicador passivo de reprodução: a pill não oferece controle de
-        // mídia por clique, então os símbolos play/pause pareciam um botão
-        // quebrado. Três barras animadas comunicam estado sem sugerir ação.
-        this._pillMediaLevels = new St.BoxLayout({
-            style_class: 'island-media-levels',
-            vertical: false,
-            reactive: false,
-            accessible_name: 'Indicador de reprodução',
-            visible: false,
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        this._pillMediaBars = [];
-        for (let i = 0; i < 3; i++) {
-            const bar = new St.Widget({
-                style_class: 'island-media-level',
-                reactive: false,
-                y_align: Clutter.ActorAlign.CENTER,
-            });
-            // scale_y com pivot no centro faz a barra crescer para cima e
-            // para baixo simultaneamente, sem parecer um equalizador preso
-            // à base.
-            bar.set_pivot_point(0.5, 0.5);
-            this._pillMediaBars.push(bar);
-            this._pillMediaLevels.add_child(bar);
-        }
-        this._setPillMediaLevels(false);
-        this._pillRight.add_child(this._pillMediaLevels);
-
-        this._pillDismissBtn = new St.Button({
-            style_class: 'island-icon-button island-pill-control',
-            child: new St.Icon({
-                icon_name: 'window-close-symbolic',
-                icon_size: 16,
-            }),
-            reactive: true,
-            can_focus: true,
-            accessible_name: 'Dispensar',
-            visible: false,
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        this._pillDismissBtn.connect('clicked',
-            () => this._showCollapsed());
-        this._pillRight.add_child(this._pillDismissBtn);
-
-        box.add_child(this._pillLeft);
-        box.add_child(this._pillClock);
-        box.add_child(this._pillRight);
-
-        this._pillClock.clutter_text.ellipsize = Pango.EllipsizeMode.END;
-
-        this._pill = new St.Widget({
-            style_class: 'island-pill',
-            layout_manager: new Clutter.BinLayout(),
-            reactive: true,
-            can_focus: true,
-            track_hover: true,
-            x_align: Clutter.ActorAlign.FILL,
-            y_align: Clutter.ActorAlign.FILL,
-            x_expand: true,
-            y_expand: true,
-        });
-        this._pillBox = box;
-        this._pill.add_child(box);
-        this._pill.connect('button-press-event',
-            (_a, event) => this._onPillPress(event));
-        this._pill.connect('notify::hover', () => {
-            if (!this._pillHoverStyle)
-                return;
-            this._pill.set_style(this._pill.hover
-                ? this._pillHoverStyle : this._pillBaseStyle);
-        });
-
         this.add_child(this._pill);
     }
 
@@ -1259,7 +1123,7 @@ class Island extends St.Widget {
 
     _measurePillWidth() {
         try {
-            const [, natW] = this._pill.get_preferred_width(-1);
+            const natW = this._pill.measureWidth();
             // Texto longo (título de música, app) não pode esticar a pill
             // pra fora da tela: limita a ~45% da largura do monitor e o
             // título elipsiza (ellipsize END já está setado no label). O
@@ -1718,8 +1582,7 @@ class Island extends St.Widget {
             : month.slice(0, 3);
         this._clockDate = `${day} ${monthShort}`;
         if (this._areaId === 'clock') {
-            this._pillClock.text = this._clockTime;
-            this._pillDate.text = this._clockDate;
+            this._pill.setClock(this._clockTime, this._clockDate);
         }
     }
 
@@ -1783,53 +1646,10 @@ class Island extends St.Widget {
     _updatePillMedia(info) {
         this._mediaInfo = info;
         const active = !!(info && (info.playing || info.paused));
-        this._setPillMediaLevels(active && !!info.playing);
+        this._pill.setLevels(active && !!info.playing);
         if (this._state === 'collapsed' && this._areaId === 'media') {
-            this._pillClock.text = info?.title || '';
+            this._pill.setTitle(info?.title || '');
             this._refitPill();
-        }
-    }
-
-    /* Disco girando: só enquanto realmente toca uma capa de álbum de
-     * verdade (não faz sentido girar um ícone genérico de app). */
-    _startMediaSpin() {
-        if (this._mediaIcon.get_transition('rotation-angle-z'))
-            return;
-        this._mediaIcon.set_pivot_point(0.5, 0.5);
-        this._animator.loop(this._mediaIcon, {
-            rotation_angle_z: 360,
-            duration: TIMING.mediaSpin,
-            mode: MODES.linear,
-            repeatCount: -1,
-        });
-    }
-
-    _stopMediaSpin() {
-        this._animator.stop(this._mediaIcon, 'rotation-angle-z');
-        this._mediaIcon.rotation_angle_z = 0;
-    }
-
-    _setPillMediaLevels(playing) {
-        if (!this._pillMediaBars)
-            return;
-        const resting = [0.45, 0.75, 0.55];
-        const peaks = [0.95, 0.5, 0.82];
-        const durations = [620, 470, 760];
-        for (let i = 0; i < this._pillMediaBars.length; i++) {
-            const bar = this._pillMediaBars[i];
-            if (!playing) {
-                this._animator.clear(bar);
-                bar.scale_y = resting[i];
-                continue;
-            }
-            bar.scale_y = resting[i];
-            this._animator.loop(bar, {
-                scale_y: peaks[i],
-                duration: durations[i],
-                mode: MODES.easeInOutSine,
-                autoReverse: true,
-                repeatCount: -1,
-            });
         }
     }
 
@@ -1899,78 +1719,25 @@ class Island extends St.Widget {
 
         if (id === 'media') {
             const info = this._media.info;
-            this._pillLeft.visible = true;
-            this._mediaIcon.visible = true;
             const art = this._resolveArt(info);
             const gicon = art ?? this._resolveAppIcon(info.icon);
-            if (gicon) {
-                this._mediaIcon.gicon = gicon;
-                this._mediaIcon.icon_name = '';
-            } else {
-                this._mediaIcon.icon_name = 'multimedia-player-symbolic';
-            }
-            // Capa de álbum vira um círculo (como o disco girando no
-            // player do iOS); ícone de fallback fica quadrado normal.
-            this._mediaIcon.set_style(art ? 'border-radius: 999px;' : '');
-            this._mediaIcon.opacity = info.playing ? 255 : 140;
-            this._pillClock.style_class = 'island-pill-title';
-            this._pillClock.text = info.title || 'Sem mídia';
-            this._pillDate.visible = false;
-            this._batteryGroup.visible = false;
-            this._pillMediaLevels.visible = true;
-            this._setPillMediaLevels(!!info.playing);
-            this._pillDismissBtn.visible = false;
-            if (art && info.playing)
-                this._startMediaSpin();
-            else
-                this._stopMediaSpin();
+            this._pill.showMediaArea(info, gicon, !!art);
         } else if (id === 'notifications') {
-            this._stopMediaSpin();
             const notif = this._notifs.getLatest();
-            this._pillLeft.visible = true;
-            this._mediaIcon.visible = true;
-            this._mediaIcon.gicon = this._notifIcon(notif);
-            this._mediaIcon.icon_name = '';
-            this._mediaIcon.set_style('');
-            this._mediaIcon.opacity = 255;
-            this._pillClock.style_class = 'island-pill-title';
-            this._pillClock.text = notif?.title ?? '';
-            this._pillDate.visible = false;
-            this._batteryGroup.visible = false;
-            this._pillMediaLevels.visible = false;
-            this._pillDismissBtn.visible = true;
+            this._pill.showNotifArea(notif, this._notifIcon(notif));
         } else {
-            this._stopMediaSpin();
             // Lado esquerdo visível: agora carrega a data (a bateria fica
             // à direita), o que mantém o horário centrado na pill.
-            this._pillLeft.visible = true;
-            this._mediaIcon.visible = false;
-            this._pillClock.style_class = 'island-clock';
-            this._pillClock.text = this._clockTime ?? '';
-            this._pillDate.text = this._clockDate ?? '';
-            this._pillDate.visible = true;
-            const showBat = !!this._battery &&
-                this._settings.get_boolean('show-battery');
-            this._batteryGroup.visible = showBat;
-            this._pillMediaLevels.visible = false;
-            this._pillDismissBtn.visible = false;
+            this._pill.showClockArea(this._clockTime ?? '',
+                this._clockDate ?? '',
+                !!this._battery &&
+                    this._settings.get_boolean('show-battery'));
         }
 
         this._areaId = id;
 
-        if (dir) {
-            const content = this._pillBox;
-            this._animator.animate(content, {
-                translation_x: 0,
-                opacity: 255,
-            }, {
-                duration: this._animator.enabled
-                    ? TIMING.areaSwap
-                    : 0,
-                mode: MODES.easeOutCubic,
-                initial: {translation_x: dir * 22, opacity: 0},
-            });
-        }
+        if (dir)
+            this._pill.slide(dir);
 
         if (this._started)
             this._refitPill();
@@ -2105,10 +1872,7 @@ class Island extends St.Widget {
     _updatePillNotifs() {
         if (this._state === 'collapsed' && this._areaId === 'notifications') {
             const notif = this._notifs.getLatest();
-            if (notif) {
-                this._mediaIcon.gicon = this._notifIcon(notif);
-                this._pillClock.text = notif.title ?? '';
-            }
+            this._pill.updateNotif(notif, this._notifIcon(notif));
         }
     }
 
@@ -2660,25 +2424,10 @@ class Island extends St.Widget {
     _onBatteryChanged(battery) {
         this._battery = battery;
         const enabled = this._settings.get_boolean('show-battery');
-        if (!battery || !enabled) {
-            this._batteryGroup.visible = false;
-            return;
-        }
-        const {percent, charging, full} = battery;
-        const level = 10 * Math.floor(clamp(percent, 0, 100) / 10);
-        let icon;
-        if (full)
-            icon = 'battery-level-100-charged-symbolic';
-        else if (charging)
-            icon = `battery-level-${level}-charging-symbolic`;
-        else
-            icon = `battery-level-${level}-symbolic`;
-        this._batteryIcon.icon_name = icon;
-        this._batteryLabel.text = `${Math.round(percent)}%`;
-        if (this._state === 'collapsed' && this._areaId === 'clock') {
-            this._batteryGroup.visible = true;
+        const show = this._state === 'collapsed' && this._areaId === 'clock';
+        this._pill.setBattery(battery, enabled && show);
+        if (show && battery && enabled)
             this._refitPill();
-        }
     }
 
     _refitPill() {
@@ -2797,13 +2546,12 @@ class Island extends St.Widget {
         const colorCss = colors
             ? ` background-color: ${colors.bg}; background-image: none; border-color: ${colors.border};`
             : '';
-        this._pillBaseStyle = `border-radius: ${Math.floor(h / 2)}px;${colorCss}`;
-        this._pillHoverStyle = colors
+        const baseStyle = `border-radius: ${Math.floor(h / 2)}px;${colorCss}`;
+        const hoverStyle = colors
             ? `border-radius: ${Math.floor(h / 2)}px; background-color: ${
                 this._lighten(colors.bg, 12)}; background-image: none; border-color: ${colors.border};`
-            : this._pillBaseStyle;
-        this._pill.set_style(
-            this._pill.hover ? this._pillHoverStyle : this._pillBaseStyle);
+            : baseStyle;
+        this._pill.setStyles(baseStyle, hoverStyle);
         this._banner.set_style(`border-radius: ${r}px;${colorCss}`);
         this._panel.set_style(`border-radius: ${r}px;${colorCss}`);
     }
