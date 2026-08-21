@@ -1,7 +1,7 @@
 UUID     = dynamic-island@eduardoaugustolb
 EXT_DIR  = $(HOME)/.local/share/gnome-shell/extensions/$(UUID)
 FILES    = extension.js island.js prefs.js metadata.json stylesheet.css
-DIRS     = modules schemas
+DIRS     = components core modules schemas
 BACKUP_DIR = $(HOME)/.local/share/dynamic-island-backups
 BACKUP_TGZ = $(BACKUP_DIR)/extension-$(shell date +%Y%m%d-%H%M%S).tar.gz
 
@@ -11,7 +11,7 @@ test:
 	gjs -m tests/run.js
 
 check: test
-	node --check extension.js island.js prefs.js modules/*.js
+	node --check extension.js island.js prefs.js components/*.js core/*.js modules/*.js
 	@echo "check: OK"
 
 # Snapshot do diretório instalado (rollback rápido sem tocar no git).

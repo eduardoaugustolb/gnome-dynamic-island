@@ -4,13 +4,16 @@ All notable changes to this project are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [5] - 2026-08-21
 
 ### Added
 - Public GitHub repository with CI for tests and syntax checks on every push and pull request.
 - README, CONTRIBUTING guide, and GPL-3.0 license.
 
 ### Fixed
+- Remote MPRIS artwork now downloads through Gio/GVfs into a local cache before being loaded by GNOME Shell, restoring album covers on GNOME 50 where `St.TextureCache.load_uri_async` is unavailable.
+- Completed the Island/Panel refactor, including carousel method references, media banner buttons, teardown cleanup, and expanded test contracts.
+- Fixed stale panel callbacks that caused `_fitPages` and `_gotoPage` runtime errors after the refactor.
 - The media card no longer shows the "Playing/Paused" labels or the "Open" action. Artwork and metadata now have 16 px spacing, and transport controls retain a 1:1 aspect ratio.
 - Wi-Fi and Bluetooth temporarily reveal the native top bar on right-click or long-press so their Quick Settings submenus remain available while the top bar is hidden.
 - Expanded-player artwork uses GNOME Shell's asynchronous `St.TextureCache`, renders remote MPRIS URLs, and reloads only when the track changes, preventing fallback flicker while art loads.
