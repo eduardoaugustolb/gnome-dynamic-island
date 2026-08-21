@@ -72,6 +72,8 @@ Open *Settings → Extensions → Dynamic Island* (or use the gear button). Avai
 extension.js   Extension entry point (enable/disable, global keybinding)
 island.js      The island: pill, banner, paged panel, and UI
 prefs.js       Preferences panel
+core/          Shared UI state, layout, and animation helpers
+components/    Pill, banner, and panel UI components
 modules/       Data modules (media.js, controls.js, notifications.js, notifQueue.js)
 schemas/       GSettings schema
 tests/         Framework-free test suite (runs with plain GJS)

@@ -18,12 +18,18 @@ import {tests as notifQueueTests} from './notifQueue.test.js';
 import {tests as mediaTests} from './media.test.js';
 import {tests as notificationsTests} from './notifications.test.js';
 import {tests as integrationTests} from './integration.test.js';
+import {tests as layoutTests} from './layout.test.js';
+import {tests as uiStateTests} from './uiState.test.js';
+import {tests as refactorContractTests} from './refactor-contract.test.js';
 
 const suites = [
     ['notifQueue.js (fila de amostragem)', notifQueueTests],
     ['media.js (MediaWatcher/MPRIS)', mediaTests],
     ['notifications.js (NotificationManager)', notificationsTests],
     ['integração: NotificationManager + NotifQueue', integrationTests],
+    ['core/layout.js (geometria da ilha)', layoutTests],
+    ['core/uiState.js (máquina de estados)', uiStateTests],
+    ['contratos da refatoração GNOME Shell', refactorContractTests],
 ];
 
 let passed = 0;
