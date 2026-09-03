@@ -23,6 +23,8 @@ import {UiState} from './core/uiState.js';
 import {Banner} from './components/Banner.js';
 import {Panel} from './components/Panel.js';
 import {Pill} from './components/Pill.js';
+import {ownIcon} from './core/icons.js';
+import {isNotchMode} from './core/displayMode.js';
 
 const STARTUP_GRACE_MS = 3000;
 const PILL_MIN_WIDTH = 210;
@@ -30,6 +32,16 @@ const SWIPE_THRESHOLD = 36;
 
 const AREA_ORDER = ['media', 'notifications', 'clock'];
 const DEFAULT_ACCENT = '#0A84FF';
+
+function hexToRgb(hex) {
+    const match = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex ?? '');
+    return match ? match.slice(1).map(value => parseInt(value, 16)) : [20, 20, 22];
+}
+
+function rgbaSetting(hex, opacity) {
+    const [r, g, b] = hexToRgb(hex);
+    return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(100, opacity)) / 100})`;
+}
 
 /* Paleta de accent-color do GNOME 46+ (org.gnome.desktop.interface),
  * usada para a ilha seguir o accent do sistema quando o usuário não
@@ -55,8 +67,12 @@ class Island extends St.Widget {
 
         this._extension = extension;
         this._settings = extension.getSettings();
+        let systemAnimations = true;
+        try {
+            systemAnimations = St.Settings.get().enable_animations;
+        } catch (_) {}
         this._animator = new Animator({
-            enabled: this._settings.get_boolean('animations'),
+            enabled: this._settings.get_boolean('animations') && systemAnimations,
         });
         this._uiState = new UiState('collapsed');
         this._captureId = 0;
@@ -127,6 +143,7 @@ class Island extends St.Widget {
             notifs: this._notifs,
             notifQueue: this._notifQueue,
             getState: () => this._state,
+            isResizing: () => this._revealing,
             maxHeight: () => this._maxHeight(),
             accentColor: () => this._accentColor(),
             resolveAppIcon: (id) => this._resolveAppIcon(id),
@@ -140,6 +157,7 @@ class Island extends St.Widget {
 
         this._panel.applyAccent();
         this._applyTheme();
+        this._syncMotionPreference();
 
         St.ThemeContext.get_for_stage(global.stage).connectObject(
             'changed', () => this.refreshTheme(), this);
@@ -191,6 +209,8 @@ class Island extends St.Widget {
 
         St.Settings.get().connectObject('notify::color-scheme',
             () => this._applyTheme(), this);
+        St.Settings.get().connectObject('notify::enable-animations',
+            () => this._syncMotionPreference(), this);
 
         // O evento normalmente chega na própria pill (o ator sob o cursor),
         // não necessariamente no contêiner raiz. Mantemos também o fallback
@@ -395,55 +415,33 @@ class Island extends St.Widget {
      * Em vez disso, o tamanho é animado diretamente e a troca de
      * camada usa opacidade + um leve deslocamento vertical. */
 
-    _animateSize(w, h, spring) {
+    _animateSize(w, h, spring, onComplete = null) {
         this._animator.animate(this, {
             width: w,
             height: h,
         }, {
             duration: spring ? TIMING.expand : TIMING.collapse,
-            mode: spring ? MODES.easeOutQuint : MODES.easeInOutQuad,
+            mode: spring ? MODES.enter : MODES.exit,
+            onComplete,
         });
     }
 
     _swapLayers(show) {
-        const anim = this._animator.enabled;
         const layers = {
             pill: this._pill,
             banner: this._banner,
             panel: this._panel,
         };
         for (const [name, layer] of Object.entries(layers)) {
-            if (name === show) {
-                layer.visible = true;
-                if (anim && layer.opacity < 255) {
-                    layer.translation_y = -5;
-                    this._animator.animate(layer, {
-                        opacity: 255,
-                        translation_y: 0,
-                    }, {
-                        delay: TIMING.swapLayerDelay,
-                        duration: TIMING.swapLayerFade,
-                        mode: MODES.easeOutQuad,
-                    });
-                } else {
-                    layer.opacity = 255;
-                    layer.translation_y = 0;
-                }
-            } else {
-                this._animator.animate(layer, {
-                    opacity: 0,
-                    translation_y: -3,
-                }, {
-                    duration: anim ? TIMING.fade : 0,
-                    mode: MODES.easeOutQuad,
-                    onComplete: () => {
-                        if (this._state !== name)
-                            layer.visible = false;
-                        layer.translation_y = 0;
-                    },
-                });
-            }
+            // O tamanho do contêiner já faz a transição. Um crossfade aqui
+            // cria um segundo movimento e expõe frames do painel piscando,
+            // especialmente quando a abertura interrompe um recolhimento.
+            layer.remove_all_transitions();
+            layer.translation_y = 0;
+            layer.opacity = 255;
+            layer.visible = name === show;
         }
+        this._applyShape();
     }
 
     _measurePillWidth() {
@@ -471,6 +469,7 @@ class Island extends St.Widget {
     }
 
     _showCollapsed() {
+        this._revealing = false;
         this._clearBannerTimer();
         this._banner.clearAction();
         this._bannerKind = null;
@@ -521,7 +520,6 @@ class Island extends St.Widget {
         // causar um engasgo na primeira vez. Bloqueado aqui.
         this._revealing = true;
         this._panel.updateContent();
-        this._revealing = false;
         const w = this._settings.get_int('expanded-width');
         this._panel.visible = true;
         // Mede a página ativa já ciente da largura alvo. Cada área recebe
@@ -536,7 +534,9 @@ class Island extends St.Widget {
         } catch (_) {
             h = 320;
         }
-        this._animateSize(w, h, true);
+        this._animateSize(w, h, true, () => {
+            this._revealing = false;
+        });
         this._swapLayers('panel');
         this._grabFocus();
     }
@@ -558,7 +558,7 @@ class Island extends St.Widget {
                 height: target,
             }, {
                 duration: TIMING.panelRefit,
-                mode: MODES.easeOutCubic,
+                mode: MODES.settle,
             });
         }
     }
@@ -984,7 +984,7 @@ class Island extends St.Widget {
     _makeIconButton(iconName, accessibleName, iconSize = 20, callback) {
         const button = new St.Button({
             style_class: 'island-icon-button',
-            child: new St.Icon({icon_name: iconName, icon_size: iconSize}),
+            child: ownIcon(iconName, iconSize),
             reactive: true,
             can_focus: false,
             accessible_name: accessibleName,
@@ -1168,7 +1168,7 @@ class Island extends St.Widget {
 
         const dismiss = new St.Button({
             style_class: 'island-icon-button island-banner-dismiss',
-            child: new St.Icon({icon_name: 'window-close-symbolic', icon_size: 16}),
+            child: ownIcon('close', 16),
             reactive: true,
             can_focus: true,
             y_align: Clutter.ActorAlign.CENTER,
@@ -1242,7 +1242,7 @@ class Island extends St.Widget {
                 height: h,
             }, {
                 duration: TIMING.pillRefit,
-                mode: MODES.easeOutQuint,
+                mode: MODES.settle,
             });
         }
     }
@@ -1334,24 +1334,47 @@ class Island extends St.Widget {
     _applyShape() {
         const h = this._settings.get_int('collapsed-height');
         const r = this._settings.get_int('corner-radius');
-        const colors = this._nativeColors();
-        const colorCss = colors
-            ? ` background-color: ${colors.bg}; background-image: none; border-color: ${colors.border};`
-            : '';
-        const baseStyle = `border-radius: ${Math.floor(h / 2)}px;${colorCss}`;
-        const hoverStyle = colors
-            ? `border-radius: ${Math.floor(h / 2)}px; background-color: ${
-                this._lighten(colors.bg, 12)}; background-image: none; border-color: ${colors.border};`
-            : baseStyle;
+        const opacity = this._settings.get_int('background-opacity');
+        const borderOpacity = this._settings.get_int('border-opacity');
+        const shadow = this._settings.get_boolean('shadow-enabled')
+            ? `box-shadow: 0 8px 28px rgba(0, 0, 0, ${
+                this._settings.get_int('shadow-opacity') / 100});`
+            : 'box-shadow: none;';
+        const scale = this._settings.get_int('text-scale');
+        const spacing = this._settings.get_int('content-spacing');
+        const pillBg = rgbaSetting(this._settings.get_string('pill-background'), opacity);
+        const panelBg = rgbaSetting(this._settings.get_string('panel-background'), opacity);
+        const border = rgbaSetting(this._settings.get_string('border-color'), borderOpacity);
+        const notch = isNotchMode(this._settings.get_string('appearance-mode'));
+        this.remove_style_class_name('appearance-pill');
+        this.remove_style_class_name('appearance-notch');
+        this.add_style_class_name(notch ? 'appearance-notch' : 'appearance-pill');
+        const common = `background-image: none; border-color: ${border}; ${shadow}` +
+            ` font-size: ${13 * scale / 100}px; font-family: ${
+                this._settings.get_string('font-family')};`;
+        const surface = this._state === 'collapsed' ? pillBg : panelBg;
+        const radius = this._state === 'collapsed'
+            ? (notch ? `0 0 ${Math.floor(h / 2)}px ${Math.floor(h / 2)}px` :
+                `${Math.floor(h / 2)}px`)
+            : (notch ? `0 0 ${r}px ${r}px` : `${r}px`);
+        const surfaceStyle = `border-radius: ${radius}; ` +
+            `background-color: ${surface}; ${common}`;
+        this.set_style(surfaceStyle);
+        const baseStyle = `border-radius: ${Math.floor(h / 2)}px; ` +
+            'background-color: transparent; border-color: transparent; ' +
+            'box-shadow: none;';
+        const hoverStyle = `border-radius: ${Math.floor(h / 2)}px; ` +
+            `background-color: ${this._lighten(pillBg, 12)}; ${common}`;
         this._pill.setStyles(baseStyle, hoverStyle);
-        this._banner.set_style(`border-radius: ${r}px;${colorCss}`);
-        this._panel.set_style(`border-radius: ${r}px;${colorCss}`);
+        this._banner.set_style(`background-color: transparent; border-color: transparent; ` +
+            `box-shadow: none; border-radius: ${r}px;`);
+        this._panel.set_style(`background-color: transparent; border-color: transparent; ` +
+            `box-shadow: none; border-radius: ${r}px; -st-spacing: ${spacing}px;`);
     }
 
     _onSettingChanged(key) {
         if (key === 'animations') {
-            this._animator.setEnabled(
-                this._settings.get_boolean('animations'));
+            this._syncMotionPreference();
         } else if (key === 'accent-color') {
             this._panel.applyAccent();
         } else if (key === 'show-controls') {
@@ -1372,12 +1395,34 @@ class Island extends St.Widget {
                         false);
                 } catch (_) {}
             }
-        } else if (key === 'corner-radius') {
+        } else if (key === 'appearance-mode') {
+            this._applyShape();
+            if (this._state === 'collapsed')
+                this._refitPill();
+        } else if (['pill-background', 'panel-background', 'background-opacity',
+            'border-opacity', 'shadow-enabled', 'shadow-opacity', 'text-scale',
+            'font-family', 'border-color', 'content-spacing', 'corner-radius'].includes(key)) {
             this._applyShape();
         } else if (key === 'collapsed-height') {
             this._applyShape();
             if (this._state === 'collapsed')
                 this._refitPill();
+        } else if (key === 'page-order' || key.startsWith('show-')) {
+            if (this._state === 'panel')
+                this._panel.updateContent();
         }
+    }
+
+    _syncMotionPreference() {
+        let systemAnimations = true;
+        try {
+            systemAnimations = St.Settings.get().enable_animations;
+        } catch (_) {}
+        const enabled = this._settings.get_boolean('animations') && systemAnimations;
+        this._animator.setEnabled(enabled);
+        if (enabled)
+            this.remove_style_class_name('motion-reduced');
+        else
+            this.add_style_class_name('motion-reduced');
     }
 });

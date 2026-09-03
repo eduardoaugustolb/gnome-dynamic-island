@@ -9,6 +9,12 @@
       <description>Onde a ilha fica ancorada na borda superior: 'center', 'left' ou 'right'.</description>
     </key>
 
+    <key name="appearance-mode" type="s">
+      <default>'pill'</default>
+      <summary>Estilo da ilha</summary>
+      <description>Escolhe uma única variante visual: 'pill' ou 'notch'.</description>
+    </key>
+
     <key name="expanded-width" type="i">
       <default>420</default>
       <range min="280" max="900"/>
@@ -85,6 +91,75 @@
       <summary>Cor de destaque</summary>
       <description>Cor usada para elementos de destaque (toggles ativos, controles de mídia).</description>
     </key>
+
+    <key name="pill-background" type="s">
+      <default>'#141416'</default>
+      <summary>Fundo da pill</summary>
+    </key>
+
+    <key name="panel-background" type="s">
+      <default>'#18181C'</default>
+      <summary>Fundo do painel</summary>
+    </key>
+
+    <key name="background-opacity" type="i">
+      <default>92</default>
+      <range min="20" max="100"/>
+      <summary>Opacidade do fundo</summary>
+    </key>
+
+    <key name="border-opacity" type="i">
+      <default>15</default>
+      <range min="0" max="100"/>
+      <summary>Opacidade da borda</summary>
+    </key>
+
+    <key name="border-color" type="s">
+      <default>'#FFFFFF'</default>
+      <summary>Cor da borda</summary>
+    </key>
+
+    <key name="shadow-enabled" type="b">
+      <default>true</default>
+      <summary>Sombra</summary>
+    </key>
+
+    <key name="shadow-opacity" type="i">
+      <default>35</default>
+      <range min="0" max="100"/>
+      <summary>Opacidade da sombra</summary>
+    </key>
+
+    <key name="text-scale" type="i">
+      <default>100</default>
+      <range min="80" max="140"/>
+      <summary>Escala do texto</summary>
+    </key>
+
+    <key name="font-family" type="s">
+      <default>'Sans'</default>
+      <summary>Família da fonte</summary>
+    </key>
+
+    <key name="content-spacing" type="i">
+      <default>8</default>
+      <range min="0" max="24"/>
+      <summary>Espaçamento do conteúdo</summary>
+    </key>
+
+    <key name="page-order" type="as">
+      <default>['media', 'controls', 'notifications']</default>
+      <summary>Ordem das páginas</summary>
+    </key>
+
+    <key name="show-volume" type="b"><default>true</default><summary>Controle de volume</summary></key>
+    <key name="show-brightness" type="b"><default>true</default><summary>Controle de brilho</summary></key>
+    <key name="show-wifi" type="b"><default>true</default><summary>Controle de Wi-Fi</summary></key>
+    <key name="show-bluetooth" type="b"><default>true</default><summary>Controle de Bluetooth</summary></key>
+    <key name="show-dark" type="b"><default>true</default><summary>Modo escuro</summary></key>
+    <key name="show-night" type="b"><default>true</default><summary>Luz noturna</summary></key>
+    <key name="show-dnd" type="b"><default>true</default><summary>Não perturbe</summary></key>
+    <key name="show-power-actions" type="b"><default>true</default><summary>Ações do sistema</summary></key>
 
     <key name="media-playpause-keybinding" type="as">
       <default>['&lt;Super&gt;&lt;Shift&gt;space']</default>

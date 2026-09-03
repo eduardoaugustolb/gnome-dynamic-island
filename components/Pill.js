@@ -4,6 +4,7 @@ import Clutter from 'gi://Clutter';
 import Pango from 'gi://Pango';
 
 import {TIMING, MODES} from '../core/animator.js';
+import {ownIcon} from '../core/icons.js';
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
@@ -125,6 +126,7 @@ class Pill extends St.Widget {
             y_align: Clutter.ActorAlign.CENTER,
         });
         this._pillMediaBars = [];
+        this._levelsPlaying = null;
         for (let i = 0; i < 3; i++) {
             const bar = new St.Widget({
                 style_class: 'island-media-level',
@@ -143,10 +145,7 @@ class Pill extends St.Widget {
 
         this._pillDismissBtn = new St.Button({
             style_class: 'island-icon-button island-pill-control',
-            child: new St.Icon({
-                icon_name: 'window-close-symbolic',
-                icon_size: 16,
-            }),
+            child: ownIcon('close', 16),
             reactive: true,
             can_focus: true,
             accessible_name: 'Dispensar',
@@ -294,7 +293,7 @@ class Pill extends St.Widget {
             opacity: 255,
         }, {
             duration: this._animator.enabled ? TIMING.areaSwap : 0,
-            mode: MODES.easeOutCubic,
+            mode: MODES.interactive,
             initial: {translation_x: dir * 22, opacity: 0},
         });
     }
@@ -321,8 +320,9 @@ class Pill extends St.Widget {
     }
 
     setLevels(playing) {
-        if (!this._pillMediaBars)
+        if (!this._pillMediaBars || this._levelsPlaying === playing)
             return;
+        this._levelsPlaying = playing;
         const resting = [0.45, 0.75, 0.55];
         const peaks = [0.95, 0.5, 0.82];
         const durations = [620, 470, 760];
@@ -337,7 +337,7 @@ class Pill extends St.Widget {
             this._animator.loop(bar, {
                 scale_y: peaks[i],
                 duration: durations[i],
-                mode: MODES.easeInOutSine,
+                mode: MODES.ambient,
                 autoReverse: true,
                 repeatCount: -1,
             });

@@ -9,6 +9,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
 
 import {TIMING, MODES} from '../core/animator.js';
+import {ownIcon, ownGIcon} from '../core/icons.js';
 import {
     clamp,
     panelInnerWidth,
@@ -34,17 +35,17 @@ const PAGE_COUNT = 3;
 const PAGE_LABELS = ['Mídia', 'Controles', 'Notificações'];
 
 const TOGGLES = [
-    {name: 'wifi', label: 'Wi-Fi', icon: 'network-wireless-symbolic'},
-    {name: 'bluetooth', label: 'Bluetooth', icon: 'bluetooth-active-symbolic'},
-    {name: 'dark', label: 'Modo escuro', icon: 'dark-mode-symbolic'},
-    {name: 'night', label: 'Luz noturna', icon: 'night-light-symbolic'},
-    {name: 'dnd', label: 'Não perturbe', icon: 'notifications-disabled-symbolic'},
+    {name: 'wifi', label: 'Wi-Fi', icon: 'wifi'},
+    {name: 'bluetooth', label: 'Bluetooth', icon: 'bluetooth'},
+    {name: 'dark', label: 'Modo escuro', icon: 'moon'},
+    {name: 'night', label: 'Luz noturna', icon: 'night'},
+    {name: 'dnd', label: 'Não perturbe', icon: 'bell-off'},
 ];
 
 const POWER_ACTIONS = [
-    {name: 'lock', label: 'Bloquear', icon: 'system-lock-screen-symbolic'},
-    {name: 'suspend', label: 'Suspender', icon: 'weather-clear-night-symbolic'},
-    {name: 'power', label: 'Desligar', icon: 'system-shutdown-symbolic'},
+    {name: 'lock', label: 'Bloquear', icon: 'lock'},
+    {name: 'suspend', label: 'Suspender', icon: 'moon'},
+    {name: 'power', label: 'Desligar', icon: 'power'},
 ];
 
 /* ================================================================
@@ -71,6 +72,7 @@ class Panel extends St.BoxLayout {
         notifs,
         notifQueue,
         getState = null,
+        isResizing = null,
         maxHeight = null,
         accentColor = null,
         resolveAppIcon = null,
@@ -99,6 +101,7 @@ class Panel extends St.BoxLayout {
         this._notifs = notifs;
         this._notifQueue = notifQueue;
         this._getState = getState;
+        this._isResizing = isResizing;
         this._maxHeight = maxHeight;
         this._accentColor = accentColor;
         this._resolveAppIcon = resolveAppIcon;
@@ -144,8 +147,8 @@ class Panel extends St.BoxLayout {
         this._collapseBtn = new St.Button({
             style_class: 'island-icon-button island-collapse',
             child: new St.Icon({
-                icon_name: 'pan-down-symbolic',
                 icon_size: 16,
+                gicon: ownGIcon('chevron-down'),
             }),
             reactive: true,
             can_focus: true,
@@ -189,7 +192,17 @@ class Panel extends St.BoxLayout {
         this._mediaPage = this._buildMediaPage();
         this._controlsPage = this._buildControlsPage();
         this._notifsPage = this._buildNotifsPage();
-        this._pages = [this._mediaPage, this._controlsPage, this._notifsPage];
+        const pageMap = {
+            media: this._mediaPage,
+            controls: this._controlsPage,
+            notifications: this._notifsPage,
+        };
+        const defaultOrder = ['media', 'controls', 'notifications'];
+        const requestedOrder = this._settings.get_strv('page-order');
+        this._pageKeys = [...requestedOrder, ...defaultOrder]
+            .filter((key, index, all) => pageMap[key] && all.indexOf(key) === index)
+            .slice(0, PAGE_COUNT);
+        this._pages = this._pageKeys.map(key => pageMap[key]);
         for (const page of this._pages) {
             page.x_expand = true;
             page.y_expand = true;
@@ -211,7 +224,7 @@ class Panel extends St.BoxLayout {
                 style_class: 'island-page-dot',
                 reactive: true,
                 can_focus: true,
-                accessible_name: PAGE_LABELS[i],
+                accessible_name: PAGE_LABELS[defaultOrder.indexOf(this._pageKeys[i])],
                 x_align: Clutter.ActorAlign.CENTER,
                 y_align: Clutter.ActorAlign.CENTER,
             });
@@ -230,6 +243,8 @@ class Panel extends St.BoxLayout {
          * são refeitas com a largura interna real (o cálculo inicial
          * em _fitPages usa a largura alvo menos o padding do CSS). */
         this.connect('notify::allocation', () => {
+            if (this._isResizing?.())
+                return;
             if (this._pagesTrack &&
                 this._pageWidth > 0 &&
                 Math.abs(this._pagesViewport.width - this._pageWidth) > 1) {
@@ -358,12 +373,9 @@ class Panel extends St.BoxLayout {
         this._controlsSection.add_child(this._controlsTitle);
 
         /* Volume */
-        this._volumeIcon = new St.Icon({
-            style_class: 'island-slider-icon',
-            icon_size: 20,
-            icon_name: 'audio-volume-medium-symbolic',
-            y_align: Clutter.ActorAlign.CENTER,
-        });
+        this._volumeIcon = ownIcon('volume', 20);
+        this._volumeIcon.style_class = 'island-slider-icon';
+        this._volumeIcon.y_align = Clutter.ActorAlign.CENTER;
         this._volumeSlider = new Slider(0);
         this._volumeSlider.accessible_name = 'Volume';
         this._volumeSlider.connect('notify::value',
@@ -387,12 +399,9 @@ class Panel extends St.BoxLayout {
         this._controlsSection.add_child(this._volumeRow);
 
         /* Brilho */
-        this._brightnessIcon = new St.Icon({
-            style_class: 'island-slider-icon',
-            icon_size: 20,
-            icon_name: 'display-brightness-symbolic',
-            y_align: Clutter.ActorAlign.CENTER,
-        });
+        this._brightnessIcon = ownIcon('brightness', 20);
+        this._brightnessIcon.style_class = 'island-slider-icon';
+        this._brightnessIcon.y_align = Clutter.ActorAlign.CENTER;
         this._brightnessSlider = new Slider(0);
         this._brightnessSlider.accessible_name = 'Brilho';
         this._brightnessSlider.connect('notify::value',
@@ -515,13 +524,39 @@ class Panel extends St.BoxLayout {
     _makeIconButton(iconName, accessibleName, iconSize = 20, callback) {
         const btn = new St.Button({
             style_class: 'island-icon-button',
-            child: new St.Icon({icon_name: iconName, icon_size: iconSize}),
+            child: ownIcon(iconName, iconSize),
             reactive: true,
             can_focus: true,
             accessible_name: accessibleName,
         });
+        this._bindPressMotion(btn);
         btn.connect('clicked', callback);
         return btn;
+    }
+
+    _bindPressMotion(button) {
+        button.set_pivot_point(0.5, 0.5);
+        button.connect('button-press-event', (_a, event) => {
+            if (event.get_button() === 1)
+                this._animator.animate(button, {
+                    scale_x: 0.985,
+                    scale_y: 0.985,
+                }, {
+                    duration: TIMING.press,
+                    mode: MODES.interactive,
+                });
+            return Clutter.EVENT_PROPAGATE;
+        });
+        button.connect('button-release-event', () => {
+            this._animator.animate(button, {
+                scale_x: 1,
+                scale_y: 1,
+            }, {
+                duration: TIMING.hover,
+                mode: MODES.settle,
+            });
+            return Clutter.EVENT_PROPAGATE;
+        });
     }
 
     _buildToggle(def) {
@@ -533,6 +568,7 @@ class Panel extends St.BoxLayout {
             can_focus: true,
             x_expand: true,
         });
+        this._bindPressMotion(btn);
         const box = new St.BoxLayout({
             vertical: true,
             x_align: Clutter.ActorAlign.CENTER,
@@ -540,7 +576,7 @@ class Panel extends St.BoxLayout {
             x_expand: true,
             y_expand: true,
         });
-        box.add_child(new St.Icon({icon_name: def.icon, icon_size: 20}));
+        box.add_child(ownIcon(def.icon, 20));
         box.add_child(new St.Label({
             text: def.label,
             style_class: 'island-toggle-label',
@@ -656,6 +692,7 @@ class Panel extends St.BoxLayout {
             can_focus: true,
             x_expand: true,
         });
+        this._bindPressMotion(btn);
         const box = new St.BoxLayout({
             vertical: true,
             x_align: Clutter.ActorAlign.CENTER,
@@ -663,7 +700,7 @@ class Panel extends St.BoxLayout {
             x_expand: true,
             y_expand: true,
         });
-        box.add_child(new St.Icon({icon_name: def.icon, icon_size: 20}));
+        box.add_child(ownIcon(def.icon, 20));
         const label = new St.Label({
             text: def.label,
             style_class: 'island-toggle-label',
@@ -904,7 +941,7 @@ class Panel extends St.BoxLayout {
             duration: animate && this._animator.enabled
                 ? TIMING.pageSwipe
                 : 0,
-            mode: MODES.easeOutCubic,
+            mode: MODES.interactive,
         });
         for (let i = 0; i < PAGE_COUNT; i++) {
             const dot = this._pageDots[i];
@@ -922,12 +959,37 @@ class Panel extends St.BoxLayout {
      * ou o empty state "Nenhuma mídia ativa"; Controles e Notificações
      * respeitam seus toggles nas preferências. */
     _availablePages() {
-        const avail = [0];
-        if (this._settings.get_boolean('show-controls'))
-            avail.push(1);
-        if (this._settings.get_boolean('show-notifications'))
-            avail.push(2);
+        const avail = [];
+        for (let i = 0; i < this._pageKeys.length; i++) {
+            const key = this._pageKeys[i];
+            if (key === 'media' || this._settings.get_boolean(`show-${key}`))
+                avail.push(i);
+        }
         return avail;
+    }
+
+    _applyPageOrder() {
+        const pageMap = {
+            media: this._mediaPage,
+            controls: this._controlsPage,
+            notifications: this._notifsPage,
+        };
+        const fallback = ['media', 'controls', 'notifications'];
+        const requested = this._settings.get_strv('page-order');
+        const keys = [...requested, ...fallback]
+            .filter((key, index, all) => pageMap[key] && all.indexOf(key) === index)
+            .slice(0, PAGE_COUNT);
+        if (keys.join(',') === this._pageKeys.join(','))
+            return;
+        this._pageKeys = keys;
+        this._pages = keys.map(key => pageMap[key]);
+        this._pagesTrack.remove_all_children();
+        for (const page of this._pages)
+            this._pagesTrack.add_child(page);
+        for (let i = 0; i < this._pageDots.length; i++) {
+            const label = PAGE_LABELS[fallback.indexOf(this._pageKeys[i])];
+            this._pageDots[i].accessible_name = label;
+        }
     }
 
     /* Sincroniza páginas/dots com o que está disponível e garante que o
@@ -1079,9 +1141,20 @@ class Panel extends St.BoxLayout {
     /* Pré-aquecimento / atualização geral do painel: alterna as seções
      * pela preferência e reconstrói o conteúdo e as páginas disponíveis. */
     updateContent() {
+        this._applyPageOrder();
         const show = this._settings.get_boolean('show-controls');
         this._controlsSection.visible = show;
-        this._systemSection.visible = show;
+        this._systemSection.visible = show &&
+            this._settings.get_boolean('show-power-actions');
+        this._volumeRow.visible = show && this._settings.get_boolean('show-volume');
+        this._brightnessRow.visible = show && this._settings.get_boolean('show-brightness');
+        for (const def of TOGGLES) {
+            const btn = this._toggleButtons[def.name];
+            if (btn)
+                btn.visible = show && this._settings.get_boolean(`show-${def.name}`);
+        }
+        for (const row of this._toggleRows)
+            row.visible = row.get_children().some(child => child.visible);
         this.syncToggles();
         this.updateMedia(this._media.info);
         this._updatePanelNotifs();
@@ -1096,10 +1169,8 @@ class Panel extends St.BoxLayout {
             this._mediaTitle.text = info.title || 'Título desconhecido';
             this._mediaArtist.text = info.artist || info.album || '';
             this._mediaArtist.visible = !!(info.artist || info.album);
-            this._mediaPlayBtn.child.icon_name =
-                info.playing
-                    ? 'media-playback-pause-symbolic'
-                    : 'media-playback-start-symbolic';
+            this._mediaPlayBtn.child.gicon = ownGIcon(
+                info.playing ? 'pause' : 'play');
             this._mediaCard.visible = true;
             this._mediaEmpty.visible = false;
         } else {
@@ -1314,7 +1385,7 @@ class Panel extends St.BoxLayout {
             icon = 'audio-volume-medium-symbolic';
         else
             icon = 'audio-volume-high-symbolic';
-        this._volumeIcon.icon_name = icon;
+        this._volumeIcon.gicon = ownGIcon(icon);
     }
 
     _onBrightnessSliderChanged() {

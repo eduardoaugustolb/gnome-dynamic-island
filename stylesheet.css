@@ -18,8 +18,26 @@
  * O contêiner raiz não desenha nada; cada camada tem o próprio visual.
  * ==================================================================== */
 
+/* Motion vocabulary. St supports transitions on theme properties, but not
+ * CSS custom properties, so these tokens remain explicit and intentional. */
+/* fast: 110-140ms | hover: 180ms | settle: 240-440ms | stagger: 32ms */
+
 .dynamic-island {
     background-color: transparent;
+}
+
+/* O modo é aplicado no ator raiz pelo JS. O raio dependente da altura
+ * continua sendo calculado em _applyShape(), para que o CSS não dispute
+ * com o style inline durante as transições. */
+.dynamic-island.appearance-pill,
+.dynamic-island.appearance-notch {
+    background-clip: padding-box;
+}
+
+/* Also covers theme-level hover/focus transitions when either the extension
+ * preference or GNOME's global animation preference disables motion. */
+.dynamic-island.motion-reduced * {
+    transition-duration: 1ms;
 }
 
 /* ==================== Pill recolhida ==================== */
@@ -34,6 +52,8 @@
     border-top-color: rgba(255, 255, 255, 0.22);
     box-shadow: none;
     padding: 0 16px;
+    transition-property: background-color, border-color;
+    transition-duration: 180ms;
 }
 
 .island-pill:hover {
@@ -90,6 +110,8 @@
 .island-pill-control {
     padding: 6px;
     background-color: rgba(255, 255, 255, 0.1);
+    transition-property: background-color, color, opacity;
+    transition-duration: 180ms;
 }
 
 /* Indicador passivo de áudio na pill: barras fixas no eixo central. A
@@ -242,6 +264,8 @@
     border-radius: 4px;
     padding: 0;
     background-color: rgba(255, 255, 255, 0.22);
+    transition-property: background-color, width;
+    transition-duration: 180ms;
 }
 
 .island-page-dot:hover {
@@ -345,6 +369,8 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 14px;
     padding: 12px 0;
+    transition-property: background-color, border-color, color;
+    transition-duration: 180ms;
 }
 
 .island-system-action:hover {
@@ -411,6 +437,8 @@
     border: 1px solid rgba(255, 255, 255, 0.09);
     border-radius: 14px;
     padding: 12px 0;
+    transition-property: background-color, border-color, color;
+    transition-duration: 180ms;
 }
 
 .island-toggle:hover {
@@ -434,6 +462,8 @@
     border-radius: 999px;
     padding: 8px;
     color: #ffffff;
+    transition-property: background-color, color, opacity;
+    transition-duration: 180ms;
 }
 
 .island-icon-button:hover {
@@ -457,6 +487,8 @@
     color: rgba(255, 255, 255, 0.42);
     background-color: rgba(255, 255, 255, 0.05);
     opacity: 0.9;
+    transition-property: background-color, color, opacity;
+    transition-duration: 140ms;
 }
 
 .island-banner-dismiss:hover {
@@ -479,6 +511,8 @@
     background-color: rgba(255, 255, 255, 0.06);
     border-radius: 999px;
     padding: 4px 10px;
+    transition-property: background-color, color;
+    transition-duration: 180ms;
 }
 
 .island-notif-clear:hover {
@@ -500,6 +534,8 @@
     background-color: rgba(255, 255, 255, 0.05);
     border-radius: 14px;
     padding: 10px 12px;
+    transition-property: background-color;
+    transition-duration: 180ms;
 }
 
 .island-notif-row:hover {

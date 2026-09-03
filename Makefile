@@ -1,7 +1,7 @@
 UUID     = dynamic-island@eduardoaugustolb
 EXT_DIR  = $(HOME)/.local/share/gnome-shell/extensions/$(UUID)
 FILES    = extension.js island.js prefs.js metadata.json stylesheet.css
-DIRS     = components core modules schemas
+DIRS     = components core modules schemas icons
 BACKUP_DIR = $(HOME)/.local/share/dynamic-island-backups
 BACKUP_TGZ = $(BACKUP_DIR)/extension-$(shell date +%Y%m%d-%H%M%S).tar.gz
 

@@ -15,27 +15,30 @@ import Clutter from 'gi://Clutter';
  * ================================================================ */
 
 export const TIMING = {
-    expand: 420,
-    collapse: 300,
-    fade: 200,
-    swapLayerDelay: 110,
-    swapLayerFade: 280,
-    pageSwipe: 220,
-    panelRefit: 340,
-    areaSwap: 320,
-    pillRefit: 480,
-    crossfadeOut: 140,
-    crossfadeIn: 220,
+    micro: 140,
+    hover: 180,
+    press: 110,
+    enter: 440,
+    exit: 240,
+    expand: 440,
+    collapse: 190,
+    pageSwipe: 260,
+    panelRefit: 360,
+    areaSwap: 300,
+    pillRefit: 400,
+    crossfadeOut: 120,
+    crossfadeIn: 240,
     mediaSpin: 8000,
 };
 
 export const MODES = {
-    easeOutQuint: Clutter.AnimationMode.EASE_OUT_QUINT,
-    easeInOutQuad: Clutter.AnimationMode.EASE_IN_OUT_QUAD,
-    easeOutQuad: Clutter.AnimationMode.EASE_OUT_QUAD,
-    easeOutCubic: Clutter.AnimationMode.EASE_OUT_CUBIC,
-    easeInQuad: Clutter.AnimationMode.EASE_IN_QUAD,
-    easeInOutSine: Clutter.AnimationMode.EASE_IN_OUT_SINE,
+    // Semantic names keep the intent visible at each call site.
+    smoothOut: Clutter.AnimationMode.EASE_OUT_QUINT,
+    enter: Clutter.AnimationMode.EASE_OUT_QUINT,
+    exit: Clutter.AnimationMode.EASE_IN_QUAD,
+    settle: Clutter.AnimationMode.EASE_OUT_CUBIC,
+    interactive: Clutter.AnimationMode.EASE_OUT_CUBIC,
+    ambient: Clutter.AnimationMode.EASE_IN_OUT_SINE,
     linear: Clutter.AnimationMode.LINEAR,
 };
 
@@ -67,12 +70,23 @@ export class Animator {
      * ao que um `ease()` com duração 0 faria no Clutter. */
     animate(actor, props, {
         duration,
-        mode = MODES.easeOutCubic,
+        mode = MODES.smoothOut,
         delay = 0,
         onComplete = null,
         initial = null,
+        preserve = true,
     } = {}) {
-        actor.remove_all_transitions();
+        // Clutter keeps the interpolated property value when a transition is
+        // removed. Do not overwrite it with `initial`: this makes quick
+        // reversals continue from the user's current visual position.
+        const interrupted = preserve && initial && Object.keys(initial).some(
+            prop => typeof actor.get_transition === 'function' &&
+                actor.get_transition(prop));
+        // Cada propriedade tem sua própria transição no Clutter. Cancelar
+        // somente os alvos evita que um refit interrompa, por exemplo,
+        // uma animação independente de opacity ou translation.
+        for (const prop of Object.keys(props))
+            actor.remove_transition(prop);
         if (!this._enabled || duration === 0) {
             for (const [prop, value] of Object.entries(props))
                 actor[prop] = value;
@@ -80,7 +94,7 @@ export class Animator {
                 onComplete();
             return;
         }
-        if (initial) {
+        if (initial && !interrupted) {
             for (const [prop, value] of Object.entries(initial))
                 actor[prop] = value;
         }
@@ -91,7 +105,13 @@ export class Animator {
      * barras de nível de reprodução. O controle de liga/desliga é do
      * chamador (a animação É o estado de "tocando"). */
     loop(actor, props) {
-        actor.remove_all_transitions();
+        for (const prop of Object.keys(props))
+            actor.remove_transition(prop);
+        if (!this._enabled) {
+            for (const [prop, value] of Object.entries(props))
+                actor[prop] = value;
+            return;
+        }
         actor.ease(props);
     }
 }

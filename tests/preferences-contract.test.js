@@ -1,0 +1,74 @@
+import Gio from 'gi://Gio';
+import {assertTrue} from './lib/assert.js';
+
+const root = Gio.File.new_for_path(import.meta.url
+    .replace('file://', '').replace('/tests/preferences-contract.test.js', ''));
+
+function source(path) {
+    const file = root.get_child(path);
+    const [, bytes] = file.load_contents(null);
+    return new TextDecoder().decode(bytes);
+}
+
+function assertIncludes(text, value) {
+    assertTrue(text.includes(value), `esperava encontrar: ${value}`);
+}
+
+const schema = () => source('schemas/org.gnome.shell.extensions.dynamic-island.gschema.xml');
+const prefs = () => source('prefs.js');
+
+export const tests = {
+    'schema expõe personalização visual avançada'() {
+        const text = schema();
+        assertIncludes(text, 'name="appearance-mode" type="s"');
+        assertIncludes(text, "<default>'pill'</default>");
+        assertIncludes(text, "'pill' ou 'notch'");
+        for (const key of [
+            'pill-background', 'panel-background', 'background-opacity',
+            'border-opacity', 'shadow-enabled', 'shadow-opacity',
+            'text-scale', 'font-family', 'border-color', 'content-spacing',
+        ])
+            assertIncludes(text, `name="${key}"`);
+    },
+
+    'schema expõe ordem, atalho e controles individuais'() {
+        const text = schema();
+        assertIncludes(text, 'name="page-order"');
+        assertIncludes(text, 'name="media-playpause-keybinding"');
+        for (const key of [
+            'show-volume', 'show-brightness', 'show-wifi', 'show-bluetooth',
+            'show-dark', 'show-night', 'show-dnd', 'show-power-actions',
+        ])
+            assertIncludes(text, `name="${key}"`);
+    },
+
+    'preferências exibem as novas opções'() {
+        const text = prefs();
+        assertIncludes(text, 'appearance-mode');
+        assertIncludes(text, 'Pill');
+        assertIncludes(text, 'Notch');
+        for (const key of [
+            'pill-background', 'panel-background', 'background-opacity',
+            'border-opacity', 'shadow-enabled', 'shadow-opacity',
+            'text-scale', 'font-family', 'border-color', 'content-spacing', 'page-order',
+            'media-playpause-keybinding', 'show-volume', 'show-brightness',
+            'show-wifi', 'show-bluetooth', 'show-dark', 'show-night',
+            'show-dnd', 'show-power-actions',
+        ])
+            assertIncludes(text, `'${key}'`);
+    },
+
+    'runtime aplica tema, escala e ordem configuráveis'() {
+        const island = source('island.js');
+        const panel = source('components/Panel.js');
+        assertIncludes(island, "get_string('appearance-mode')");
+        assertIncludes(island, "appearance-notch");
+        assertIncludes(island, "get_string('pill-background')");
+        assertIncludes(island, "get_int('background-opacity')");
+        assertIncludes(island, "get_boolean('shadow-enabled')");
+        assertIncludes(island, "get_int('text-scale')");
+        assertIncludes(island, "get_string('font-family')");
+        assertIncludes(panel, "get_strv('page-order')");
+        assertIncludes(panel, "get_boolean('show-volume')");
+    },
+};

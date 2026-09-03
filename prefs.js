@@ -3,9 +3,11 @@ import Gdk from 'gi://Gdk';
 import Gio from 'gi://Gio';
 import Gtk from 'gi://Gtk';
 
-import {ExtensionPreferences} from 'resource:///org/gnome/shell/extensions/prefs.js';
+import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 const POSITIONS = ['center', 'left', 'right'];
+const APPEARANCE_MODES = ['pill', 'notch'];
+const APPEARANCE_LABELS = ['Pill', 'Notch'];
 
 function hexToRgba(hex) {
     const v = parseInt(hex.slice(1), 16);
@@ -44,6 +46,38 @@ function switchRow(title, subtitle, key, settings) {
     return row;
 }
 
+function colorRow(title, subtitle, key, settings) {
+    const row = new Adw.ActionRow({title, subtitle});
+    const button = new Gtk.ColorButton({
+        rgba: hexToRgba(settings.get_string(key)),
+    });
+    button.connect('color-set', btn =>
+        settings.set_string(key, rgbaToHex(btn.rgba)));
+    row.add_suffix(button);
+    row.set_activatable_widget(button);
+    return row;
+}
+
+function stringRow(title, subtitle, key, settings) {
+    const row = new Adw.EntryRow({title, text: settings.get_string(key)});
+    row.set_tooltip_text(subtitle);
+    row.connect('changed', entry => settings.set_string(key, entry.text));
+    return row;
+}
+
+function strvRow(title, subtitle, key, settings) {
+    const row = new Adw.EntryRow({
+        title,
+        text: settings.get_strv(key).join(', '),
+    });
+    row.set_tooltip_text(subtitle);
+    row.connect('changed', entry => {
+        const values = entry.text.split(',').map(value => value.trim()).filter(Boolean);
+        settings.set_strv(key, values);
+    });
+    return row;
+}
+
 export default class DynamicIslandPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         const settings = this.getSettings();
@@ -66,6 +100,25 @@ export default class DynamicIslandPreferences extends ExtensionPreferences {
             settings.set_string('position', POSITIONS[row.selected]));
         general.add(position);
 
+        const appearance = new Adw.ComboRow({
+            title: 'Estilo',
+            subtitle: 'Escolha entre a pill flutuante e o notch conectado ao topo',
+            model: new Gtk.StringList({strings: APPEARANCE_LABELS}),
+        });
+        appearance.selected = Math.max(0, APPEARANCE_MODES.indexOf(
+            settings.get_string('appearance-mode')));
+        appearance.connect('notify::selected', row => {
+            const mode = APPEARANCE_MODES[row.selected] ?? 'pill';
+            if (settings.get_string('appearance-mode') !== mode)
+                settings.set_string('appearance-mode', mode);
+        });
+        settings.connect('changed::appearance-mode', () => {
+            const selected = APPEARANCE_MODES.indexOf(
+                settings.get_string('appearance-mode'));
+            appearance.selected = selected >= 0 ? selected : 0;
+        });
+        general.add(appearance);
+
         general.add(spinRow('Largura expandida',
             'expanded-width', settings,
             {lower: 280, upper: 900, step: 10}));
@@ -76,18 +129,29 @@ export default class DynamicIslandPreferences extends ExtensionPreferences {
             'corner-radius', settings,
             {lower: 10, upper: 80, step: 2}));
 
-        const accentRow = new Adw.ActionRow({
-            title: 'Cor de destaque',
-            subtitle: 'Usada nos toggles ativos e nos sliders',
-        });
-        const accentButton = new Gtk.ColorButton({
-            rgba: hexToRgba(settings.get_string('accent-color')),
-        });
-        accentButton.connect('color-set', btn =>
-            settings.set_string('accent-color', rgbaToHex(btn.rgba)));
-        accentRow.add_suffix(accentButton);
-        accentRow.set_activatable_widget(accentButton);
-        general.add(accentRow);
+        general.add(colorRow('Cor de destaque',
+            'Usada nos toggles ativos e nos sliders', 'accent-color', settings));
+        general.add(colorRow('Cor da borda',
+            'Cor da borda da pill e do painel', 'border-color', settings));
+        general.add(colorRow('Fundo da pill',
+            'Cor da área recolhida', 'pill-background', settings));
+        general.add(colorRow('Fundo do painel',
+            'Cor da área expandida', 'panel-background', settings));
+        general.add(spinRow('Opacidade do fundo',
+            'background-opacity', settings, {lower: 20, upper: 100, step: 1}));
+        general.add(spinRow('Opacidade da borda',
+            'border-opacity', settings, {lower: 0, upper: 100, step: 1}));
+        general.add(switchRow('Sombra', 'Exibe uma sombra ao redor da ilha',
+            'shadow-enabled', settings));
+        general.add(spinRow('Opacidade da sombra',
+            'shadow-opacity', settings, {lower: 0, upper: 100, step: 1}));
+        general.add(spinRow('Escala do texto',
+            'text-scale', settings, {lower: 80, upper: 140, step: 5}));
+        general.add(stringRow('Família da fonte',
+            'Nome da família instalada, por exemplo Sans ou Cantarell',
+            'font-family', settings));
+        general.add(spinRow('Espaçamento do conteúdo',
+            'content-spacing', settings, {lower: 0, upper: 24, step: 1}));
 
         /* ---------- Comportamento ---------- */
         const behavior = new Adw.PreferencesGroup({title: 'Comportamento'});
@@ -105,6 +169,12 @@ export default class DynamicIslandPreferences extends ExtensionPreferences {
         behavior.add(spinRow('Duração do banner de mídia',
             'media-banner-duration', settings,
             {lower: 1500, upper: 30000, step: 500}));
+        behavior.add(strvRow('Atalho de mídia',
+            'Aceleradores GNOME separados por vírgula',
+            'media-playpause-keybinding', settings));
+        behavior.add(strvRow('Ordem das páginas',
+            'Use media, controls e notifications separados por vírgula',
+            'page-order', settings));
 
         /* ---------- Conteúdo ---------- */
         const content = new Adw.PreferencesGroup({title: 'Conteúdo'});
@@ -122,5 +192,16 @@ export default class DynamicIslandPreferences extends ExtensionPreferences {
         content.add(switchRow('Bateria',
             'Ícone e porcentagem na pill',
             'show-battery', settings));
+
+        const controls = new Adw.PreferencesGroup({title: 'Controles individuais'});
+        page.add(controls);
+        for (const [key, title] of [
+            ['show-volume', 'Volume'], ['show-brightness', 'Brilho'],
+            ['show-wifi', 'Wi-Fi'], ['show-bluetooth', 'Bluetooth'],
+            ['show-dark', 'Modo escuro'], ['show-night', 'Luz noturna'],
+            ['show-dnd', 'Não perturbe'], ['show-power-actions', 'Ações do sistema'],
+        ])
+            controls.add(switchRow(title, `Mostrar ${title.toLowerCase()}`,
+                key, settings));
     }
 }

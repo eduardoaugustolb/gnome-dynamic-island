@@ -21,6 +21,8 @@ import {tests as integrationTests} from './integration.test.js';
 import {tests as layoutTests} from './layout.test.js';
 import {tests as uiStateTests} from './uiState.test.js';
 import {tests as refactorContractTests} from './refactor-contract.test.js';
+import {tests as preferencesContractTests} from './preferences-contract.test.js';
+import {tests as displayModeTests} from './displayMode.test.js';
 
 const suites = [
     ['notifQueue.js (fila de amostragem)', notifQueueTests],
@@ -30,6 +32,8 @@ const suites = [
     ['core/layout.js (geometria da ilha)', layoutTests],
     ['core/uiState.js (máquina de estados)', uiStateTests],
     ['contratos da refatoração GNOME Shell', refactorContractTests],
+    ['contratos de personalização', preferencesContractTests],
+    ['core/displayMode.js (modo visual)', displayModeTests],
 ];
 
 let passed = 0;

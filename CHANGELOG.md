@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [6] - 2026-09-02
+
+### Added
+- Pill and top-attached Notch appearance modes, selectable exclusively from the preferences.
+- Defensive normalization of the appearance mode, falling back to Pill for invalid settings.
+- Automated contracts covering the appearance mode, preferences, and notch integration.
+
+### Fixed
+- Reduced layout churn during panel expansion by postponing page fitting until the main resize animation completes.
+- Preserved independent Clutter transitions when animating different properties on the same actor.
+- Prevented media level animations from restarting on every MPRIS update when playback state is unchanged.
+
 ## [5] - 2026-08-21
 
 ### Added

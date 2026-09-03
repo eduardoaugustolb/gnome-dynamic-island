@@ -150,7 +150,7 @@ class Banner extends St.Widget {
             translation_x: -16,
         }, {
             duration: TIMING.crossfadeOut,
-            mode: MODES.easeInQuad,
+            mode: MODES.exit,
             onComplete: () => {
                 swap();
                 this._bin.translation_x = 16;
@@ -159,7 +159,7 @@ class Banner extends St.Widget {
                     translation_x: 0,
                 }, {
                     duration: TIMING.crossfadeIn,
-                    mode: MODES.easeOutQuad,
+                    mode: MODES.enter,
                 });
                 if (after)
                     after();

@@ -5,10 +5,15 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {Island} from './island.js';
+import {isNotchMode} from './core/displayMode.js';
 
 const TOP_GAP = 8;
 
 export default class DynamicIslandExtension extends Extension {
+    _topGap() {
+        return isNotchMode(this._settings?.get_string('appearance-mode')) ? 0 : TOP_GAP;
+    }
+
     enable() {
         this._settings = this.getSettings();
 
@@ -41,7 +46,10 @@ export default class DynamicIslandExtension extends Extension {
                     this._applyTopBar();
                 else if (key === 'position')
                     this._position();
-                else if (key === 'collapsed-height')
+                else if (key === 'appearance-mode') {
+                    this._position();
+                    this._updateStrut();
+                } else if (key === 'collapsed-height')
                     this._updateStrut();
             });
 
@@ -69,8 +77,9 @@ export default class DynamicIslandExtension extends Extension {
             return;
         // Só reservamos espaço próprio quando a barra nativa está
         // escondida; caso contrário ela já reserva a área.
+        const topGap = this._topGap();
         const h = this._topBarHidden
-            ? this._settings.get_int('collapsed-height') + TOP_GAP * 2
+            ? this._settings.get_int('collapsed-height') + topGap * 2
             : 0;
         this._strut.set_position(monitor.x, monitor.y);
         this._strut.set_size(monitor.width, h);
@@ -133,17 +142,18 @@ export default class DynamicIslandExtension extends Extension {
         const monitor = Main.layoutManager.primaryMonitor;
         if (!monitor)
             return;
+        const topGap = this._topGap();
         const w = this._island.width;
         const h = this._island.height;
         const pos = this._settings.get_string('position');
         let x;
         if (pos === 'left')
-            x = monitor.x + TOP_GAP;
+            x = monitor.x + topGap;
         else if (pos === 'right')
-            x = monitor.x + monitor.width - w - TOP_GAP;
+            x = monitor.x + monitor.width - w - topGap;
         else
             x = monitor.x + Math.floor((monitor.width - w) / 2);
-        const y = monitor.y + TOP_GAP;
+        const y = monitor.y + topGap;
         if (this._island.x !== x || this._island.y !== y)
             this._island.set_position(x, y);
     }

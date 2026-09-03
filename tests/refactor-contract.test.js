@@ -82,4 +82,30 @@ export const tests = {
         assertTrue(panel.includes('powerOff()'));
         assertTrue(panel.includes('2500'));
     },
+
+    'troca de camadas não faz crossfade entre pill e painel'() {
+        const island = source('island.js');
+        const start = island.indexOf('_swapLayers(show)');
+        const end = island.indexOf('\n    }', start);
+        const swap = island.slice(start, end);
+        assertTrue(start >= 0);
+        assertTrue(swap.includes('layer.opacity = 255;'));
+        assertTrue(!swap.includes('layer.opacity = 0;'));
+        assertTrue(!swap.includes('TIMING.fade'));
+    },
+
+    'ilha usa uma única superfície visual durante a expansão'() {
+        const island = source('island.js');
+        assertTrue(island.includes('this.set_style(surfaceStyle)'));
+        assertTrue(island.includes('this._applyShape();',
+            island.indexOf('_swapLayers(show)')));
+        assertTrue(island.includes('background-color: transparent'));
+    },
+
+    'preferência de movimento usa a API de classes do St'() {
+        const island = source('island.js');
+        assertTrue(island.includes("remove_style_class_name('motion-reduced')"));
+        assertTrue(island.includes("add_style_class_name('motion-reduced')"));
+        assertFalse(island.includes('toggle_style_class_name('));
+    },
 };

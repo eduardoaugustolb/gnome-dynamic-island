@@ -58,11 +58,18 @@ _Coming soon: a package published on [extensions.gnome.org](https://extensions.g
 
 Open *Settings → Extensions → Dynamic Island* (or use the gear button). Available preferences include:
 
+- Display mode: floating **Pill** or top-attached **Notch** (mutually exclusive; Pill is the default)
+  - The same setting can be changed with `gsettings set org.gnome.shell.extensions.dynamic-island appearance-mode notch`.
+  - Notch mode is intended to be used with the top bar hidden.
 - Expanded panel width and pill height
 - Toast and media-banner durations
 - Show or hide controls, notifications, and media
 - Accent color
 - Optional animations
+- Independent pill and panel colors, background/border opacity, and shadow
+- Text scale and content spacing
+- Custom page order and media shortcut
+- Individual visibility for sliders, toggles, and power actions
 
 ## Development
 
@@ -82,11 +89,11 @@ tests/         Framework-free test suite (runs with plain GJS)
 ### Tests
 
 ```bash
-gjs -m tests/run.js     # 37 tests: media, notifications, notifQueue, and integration
+gjs -m tests/run.js     # framework-free tests: media, notifications, notifQueue, UI contracts, and integration
 node --check island.js  # syntax check
 ```
 
-Tests cover only modules independent from GNOME Shell (`media.js`, `notifications.js`, and `notifQueue.js`). `island.js` and `controls.js` depend on `resource:///org/gnome/shell` and run only inside GNOME Shell.
+The test suite runs modules independent from GNOME Shell plus source-level contracts for the UI integration. `island.js` and `controls.js` depend on `resource:///org/gnome/shell` and their runtime behavior is validated only inside GNOME Shell.
 
 ### CI
 
