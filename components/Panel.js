@@ -73,6 +73,7 @@ class Panel extends St.BoxLayout {
         notifQueue,
         getState = null,
         isResizing = null,
+        expandedWidth = null,
         maxHeight = null,
         accentColor = null,
         resolveAppIcon = null,
@@ -102,6 +103,7 @@ class Panel extends St.BoxLayout {
         this._notifQueue = notifQueue;
         this._getState = getState;
         this._isResizing = isResizing;
+        this._expandedWidth = expandedWidth;
         this._maxHeight = maxHeight;
         this._accentColor = accentColor;
         this._resolveAppIcon = resolveAppIcon;
@@ -153,7 +155,8 @@ class Panel extends St.BoxLayout {
             reactive: true,
             can_focus: true,
             y_align: Clutter.ActorAlign.CENTER,
-            accessible_name: 'Recolher',
+            accessible_name: 'Recolher painel',
+            tooltip_text: 'Recolher painel (Escape)',
         });
         this._collapseBtn.connect('clicked', () => {
             if (this._onCollapse)
@@ -224,7 +227,8 @@ class Panel extends St.BoxLayout {
                 style_class: 'island-page-dot',
                 reactive: true,
                 can_focus: true,
-                accessible_name: PAGE_LABELS[defaultOrder.indexOf(this._pageKeys[i])],
+                accessible_name: `Ir para ${PAGE_LABELS[defaultOrder.indexOf(this._pageKeys[i])]}`,
+                tooltip_text: `Mostrar página ${PAGE_LABELS[defaultOrder.indexOf(this._pageKeys[i])]}`,
                 x_align: Clutter.ActorAlign.CENTER,
                 y_align: Clutter.ActorAlign.CENTER,
             });
@@ -324,14 +328,14 @@ class Panel extends St.BoxLayout {
             'media-playback-start-symbolic', 'Reproduzir/Pausar', 22,
             () => this._media.playPause());
         this._mediaPlayBtn.style_class += ' island-play-button';
-        // Sem foco de teclado para Espaço não brigar com o atalho nativo
-        // do player.
-        this._mediaPlayBtn.can_focus = false;
-        this._mediaPrevBtn.can_focus = false;
+        // O foco explícito torna os comandos utilizáveis por teclado; o
+        // atalho global continua disponível quando a ilha não está focada.
+        this._mediaPlayBtn.can_focus = true;
+        this._mediaPrevBtn.can_focus = true;
         this._mediaNextBtn = this._makeIconButton(
             'media-skip-forward-symbolic', 'Próxima', 18,
             () => this._media.next());
-        this._mediaNextBtn.can_focus = false;
+        this._mediaNextBtn.can_focus = true;
         mediaCtrls.add_child(this._mediaPrevBtn);
         mediaCtrls.add_child(this._mediaPlayBtn);
         mediaCtrls.add_child(this._mediaNextBtn);
@@ -377,7 +381,9 @@ class Panel extends St.BoxLayout {
         this._volumeIcon.style_class = 'island-slider-icon';
         this._volumeIcon.y_align = Clutter.ActorAlign.CENTER;
         this._volumeSlider = new Slider(0);
+        Object.assign(this._volumeSlider, {accessible_name: 'Volume'});
         this._volumeSlider.accessible_name = 'Volume';
+        this._volumeSlider.set_tooltip_text('Ajustar volume');
         this._volumeSlider.connect('notify::value',
             () => this._onVolumeSliderChanged());
         this._volumeSlider.connect('drag-begin',
@@ -403,7 +409,9 @@ class Panel extends St.BoxLayout {
         this._brightnessIcon.style_class = 'island-slider-icon';
         this._brightnessIcon.y_align = Clutter.ActorAlign.CENTER;
         this._brightnessSlider = new Slider(0);
+        Object.assign(this._brightnessSlider, {accessible_name: 'Brilho'});
         this._brightnessSlider.accessible_name = 'Brilho';
+        this._brightnessSlider.set_tooltip_text('Ajustar brilho');
         this._brightnessSlider.connect('notify::value',
             () => this._onBrightnessSliderChanged());
         this._brightnessSlider.connect('drag-begin',
@@ -465,6 +473,7 @@ class Panel extends St.BoxLayout {
             can_focus: true,
             visible: false,
             accessible_name: 'Limpar notificações',
+            tooltip_text: 'Remover todas as notificações',
         });
         this._notifClearBtn.connect('clicked', () => {
             this._notifQueue.clear();
@@ -528,6 +537,7 @@ class Panel extends St.BoxLayout {
             reactive: true,
             can_focus: true,
             accessible_name: accessibleName,
+            tooltip_text: accessibleName,
         });
         this._bindPressMotion(btn);
         btn.connect('clicked', callback);
@@ -566,6 +576,8 @@ class Panel extends St.BoxLayout {
             checked: false,
             reactive: true,
             can_focus: true,
+            accessible_name: def.label,
+            tooltip_text: `Alternar ${def.label}`,
             x_expand: true,
         });
         this._bindPressMotion(btn);
@@ -690,6 +702,10 @@ class Panel extends St.BoxLayout {
                 (def.name === 'power' ? ' island-power-action' : ''),
             reactive: true,
             can_focus: true,
+            accessible_name: def.name === 'power'
+                ? `${def.label}; requer confirmação` : def.label,
+            tooltip_text: def.name === 'power'
+                ? 'Desligar; clique novamente para confirmar' : def.label,
             x_expand: true,
         });
         this._bindPressMotion(btn);
@@ -830,7 +846,8 @@ class Panel extends St.BoxLayout {
         // aparecia cortado na direita). A geometria do carrossel usa sempre
         // a largura-alvo estável; o parâmetro existe só para a abertura e
         // mudanças explícitas de preferência.
-        const w = width ?? this._settings.get_int('expanded-width');
+        const w = width ?? this._expandedWidth?.() ??
+            this._settings.get_int('expanded-width');
         const inner = panelInnerWidth(w);
         this._pageWidth = inner;
         // Cada página tem a largura exata do viewport (e o track, PAGE_COUNT
@@ -988,7 +1005,8 @@ class Panel extends St.BoxLayout {
             this._pagesTrack.add_child(page);
         for (let i = 0; i < this._pageDots.length; i++) {
             const label = PAGE_LABELS[fallback.indexOf(this._pageKeys[i])];
-            this._pageDots[i].accessible_name = label;
+            this._pageDots[i].accessible_name = `Ir para ${label}`;
+            this._pageDots[i].tooltip_text = `Mostrar página ${label}`;
         }
     }
 
@@ -1266,7 +1284,16 @@ class Panel extends St.BoxLayout {
         // A lista agora rola dentro do próprio contêiner (island-notif-
         // scroll), então não precisa mais truncar em MAX_NOTIF_ROWS —
         // mostra tudo que o NotificationManager mantiver.
-        const shown = this._notifs.notifications;
+        // O array legado continua disponível para banners; a lista visual
+        // usa uma linha por fonte, evitando repetir dezenas de notificações
+        // do mesmo app. Cada grupo mantém a notificação mais recente como
+        // representante para ativação.
+        const shown = this._notifs.notificationGroups ??
+            this._notifs.notifications.map(notif => ({
+                latest: notif,
+                notifications: [notif],
+                count: 1,
+            }));
         if (shown.length === 0) {
             const empty = new St.Label({
                 text: 'Sem notificações',
@@ -1274,8 +1301,8 @@ class Panel extends St.BoxLayout {
             });
             this._notifList.add_child(empty);
         } else {
-            for (const notif of shown)
-                this._notifList.add_child(this._buildNotifRow(notif));
+            for (const group of shown)
+                this._notifList.add_child(this._buildNotifRow(group));
         }
         if (this._notifClearBtn)
             this._notifClearBtn.visible = shown.length > 0;
@@ -1299,11 +1326,18 @@ class Panel extends St.BoxLayout {
             });
     }
 
-    _buildNotifRow(notif) {
+    _buildNotifRow(groupOrNotif) {
+        // Aceita uma Notification diretamente para manter compatibilidade
+        // com callers antigos e aceita também o grupo do novo modelo.
+        const group = groupOrNotif?.latest ? groupOrNotif : null;
+        const notif = group?.latest ?? groupOrNotif;
+        const count = group?.count ?? 1;
         const row = new St.Button({
             style_class: 'island-notif-row',
             reactive: true,
             can_focus: true,
+            accessible_name: notif.title || 'Notificação',
+            tooltip_text: 'Abrir notificação',
             x_expand: true,
         });
         const box = new St.BoxLayout({
@@ -1336,6 +1370,14 @@ class Panel extends St.BoxLayout {
             style_class: 'island-notif-time',
         });
         meta.add_child(appName);
+        if (count > 1) {
+            const countLabel = new St.Label({
+                text: `×${count}`,
+                style_class: 'island-notif-count',
+                x_align: Clutter.ActorAlign.END,
+            });
+            meta.add_child(countLabel);
+        }
         meta.add_child(time);
 
         const title = new St.Label({
