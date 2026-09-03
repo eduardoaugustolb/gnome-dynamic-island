@@ -449,6 +449,16 @@
     background-color: rgba(255, 255, 255, 0.18);
 }
 
+/* O foco de teclado não depende de hover e permanece visível em todos os
+ * controles interativos, inclusive durante navegação por Tab. */
+.island-toggle:focus,
+.island-icon-button:focus,
+.island-notif-row:focus,
+.island-notif-clear:focus,
+.slider:focus {
+    box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.95);
+}
+
 .island-toggle-label {
     font-size: 10px;
     font-weight: 600;
@@ -556,6 +566,14 @@
 .island-notif-time {
     font-size: 10px;
     color: rgba(255, 255, 255, 0.32);
+}
+
+.island-notif-count {
+    font-size: 10px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.72);
+    margin-left: 6px;
+    margin-right: 6px;
 }
 
 .island-notif-title {

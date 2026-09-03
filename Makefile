@@ -12,6 +12,7 @@ test:
 
 check: test
 	node --check extension.js island.js prefs.js components/*.js core/*.js modules/*.js
+	glib-compile-schemas --strict --dry-run schemas
 	@echo "check: OK"
 
 # Snapshot do diretório instalado (rollback rápido sem tocar no git).

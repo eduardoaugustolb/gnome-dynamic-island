@@ -84,6 +84,7 @@ components/    Pill, banner, and panel UI components
 modules/       Data modules (media.js, controls.js, notifications.js, notifQueue.js)
 schemas/       GSettings schema
 tests/         Framework-free test suite (runs with plain GJS)
+TESTING.md     Automated checks and GNOME Shell release checklist
 ```
 
 ### Tests
@@ -93,7 +94,7 @@ gjs -m tests/run.js     # framework-free tests: media, notifications, notifQueue
 node --check island.js  # syntax check
 ```
 
-The test suite runs modules independent from GNOME Shell plus source-level contracts for the UI integration. `island.js` and `controls.js` depend on `resource:///org/gnome/shell` and their runtime behavior is validated only inside GNOME Shell.
+The test suite runs modules independent from GNOME Shell plus source-level contracts for the UI integration. Deterministic geometry, state transitions, fallbacks, lifecycle contracts, and data handling are covered automatically; actor/compositor behavior still requires the GNOME Shell checklist in [TESTING.md](TESTING.md).
 
 ### CI
 
