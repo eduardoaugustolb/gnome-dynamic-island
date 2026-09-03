@@ -25,6 +25,47 @@ export const pillWidthCap = (monitorWidth, minWidth = 210,
 export const clampPillWidth = (natural, minWidth, monitorWidth) =>
     clamp(natural, minWidth, pillWidthCap(monitorWidth, minWidth));
 
+/* Largura efetiva do painel: a preferência nunca deve fazer a ilha
+ * ultrapassar o monitor atual. O monitor usa logical pixels, como os
+ * valores de allocation do GNOME Shell. */
+export const expandedWidth = (configured, monitorWidth, margin = 16) => {
+    if (!monitorWidth)
+        return configured;
+    return Math.min(configured, Math.max(1, monitorWidth - margin * 2));
+};
+
+/* Posição horizontal/vertical da superfície no monitor. O clamp final
+ * também protege contra uma preferência antiga maior que a tela atual. */
+export const positionIsland = ({
+    monitor,
+    islandWidth,
+    islandHeight,
+    position = 'center',
+    topGap = 8,
+    horizontalGap = topGap,
+} = {}) => {
+    if (!monitor)
+        return {x: 0, y: 0};
+    const left = monitor.x + horizontalGap;
+    const right = monitor.x + monitor.width - islandWidth - horizontalGap;
+    const minX = Math.min(left, right);
+    const maxX = Math.max(left, right);
+    let x;
+    if (position === 'left')
+        x = left;
+    else if (position === 'right')
+        x = right;
+    else
+        x = monitor.x + Math.floor((monitor.width - islandWidth) / 2);
+    return {
+        x: clamp(x, minX, maxX),
+        y: monitor.y + topGap,
+    };
+};
+
+export const strutHeight = (collapsedHeight, topGap, topBarHidden) =>
+    topBarHidden ? collapsedHeight + topGap * 2 : 0;
+
 /* Teto de altura do painel expandido: a viewport menos o gap do topo e
  * uma margem inferior (48px no total), nunca acima de 560 nem abaixo de
  * 240. */

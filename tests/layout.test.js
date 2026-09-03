@@ -11,6 +11,9 @@ import {
     clampPageHeight,
     panelTargetHeight,
     controlCellWidth,
+    expandedWidth,
+    positionIsland,
+    strutHeight,
 } from '../core/layout.js';
 import {assertEqual, assertTrue} from './lib/assert.js';
 
@@ -35,6 +38,49 @@ export const tests = {
         assertEqual(clampPillWidth(500, 210, 1920), 500); // dentro do teto
         assertEqual(clampPillWidth(1200, 210, 800), 360); // corta no teto
         assertEqual(clampPillWidth(2000, 210, null), 560); // fallback
+    },
+
+    'expandedWidth nunca ultrapassa o monitor atual'() {
+        assertEqual(expandedWidth(900, 1920), 900);
+        assertEqual(expandedWidth(900, 640), 608);
+        assertEqual(expandedWidth(420, 320), 288);
+        assertEqual(expandedWidth(420, null), 420);
+        assertEqual(expandedWidth(420, 320, 8), 304);
+    },
+
+    'expandedWidth cobre escalas fracionárias em logical pixels'() {
+        for (const scale of [1, 1.25, 1.5, 2]) {
+            const physicalWidth = 1920;
+            const logicalWidth = physicalWidth / scale;
+            assertTrue(expandedWidth(900, logicalWidth, 16) <= logicalWidth - 32);
+        }
+    },
+
+    'positionIsland centraliza e ancora a ilha sem overflow'() {
+        const monitor = {x: 0, y: 0, width: 1920, height: 1080};
+        assertEqual(positionIsland({
+            monitor, islandWidth: 420, islandHeight: 300,
+            position: 'center', topGap: 8,
+        }), {x: 750, y: 8});
+        assertEqual(positionIsland({
+            monitor, islandWidth: 420, islandHeight: 300,
+            position: 'left', topGap: 8,
+        }), {x: 8, y: 8});
+        assertEqual(positionIsland({
+            monitor, islandWidth: 420, islandHeight: 300,
+            position: 'right', topGap: 8,
+        }), {x: 1492, y: 8});
+        assertEqual(positionIsland({
+            monitor: {x: -1280, y: 0, width: 1280, height: 720},
+            islandWidth: 900, islandHeight: 300,
+            position: 'center', topGap: 0,
+        }), {x: -1090, y: 0});
+    },
+
+    'strutHeight reserva somente quando a barra está escondida'() {
+        assertEqual(strutHeight(34, 8, true), 50);
+        assertEqual(strutHeight(34, 0, true), 34);
+        assertEqual(strutHeight(34, 8, false), 0);
     },
 
     'maxPanelHeight respeita a viewport e os tetos fixos'() {
@@ -104,5 +150,41 @@ export const tests = {
         assertTrue(maxH === 560 && chrome === 124);
         assertEqual(pageH, 260);
         assertEqual(panelTargetHeight(260, maxH), 268);
+    },
+
+    'troca de monitor recalcula largura, posição e strut'() {
+        const config = {width: 1400, position: 'right', collapsedHeight: 34};
+        const large = {x: 0, y: 0, width: 1920, height: 1080};
+        const small = {x: -1280, y: 0, width: 1280, height: 720};
+        const largeWidth = expandedWidth(config.width, large.width);
+        const smallWidth = expandedWidth(config.width, small.width);
+
+        assertEqual(largeWidth, 1400);
+        assertEqual(smallWidth, 1248);
+        assertEqual(positionIsland({
+            monitor: small, islandWidth: smallWidth, islandHeight: 300,
+            position: config.position, topGap: 0,
+        }), {x: -1248, y: 0});
+        assertEqual(strutHeight(config.collapsedHeight, 0, true), 34);
+    },
+
+    'mudanças de configuração mantêm limites geométricos'() {
+        const monitor = {x: 0, y: 0, width: 640, height: 480};
+        for (const mode of ['pill', 'notch']) {
+            for (const position of ['left', 'center', 'right']) {
+                const width = expandedWidth(900, monitor.width);
+                const gap = mode === 'notch' ? 0 : 8;
+                const point = positionIsland({
+                    monitor, islandWidth: width, islandHeight: 300,
+                    position, topGap: gap,
+                });
+                assertTrue(point.x >= monitor.x);
+                assertTrue(point.x + width <= monitor.x + monitor.width);
+                assertTrue(point.y === monitor.y + gap);
+            }
+        }
+        assertTrue(maxPanelHeight(monitor.height) >= 240);
+        assertTrue(panelTargetHeight(1000, maxPanelHeight(monitor.height)) <=
+            maxPanelHeight(monitor.height));
     },
 };

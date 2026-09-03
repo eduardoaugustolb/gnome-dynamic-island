@@ -67,6 +67,13 @@ export const tests = {
         assertTrue(island.includes('NÃO chamamos grab_key_focus() nem pushModal'));
     },
 
+    'largura expandida respeita o monitor atual'() {
+        const island = source('island.js');
+        assertTrue(island.includes('expandedWidth: () => this._expandedWidth()'));
+        assertTrue(island.includes('return expandedWidth(configured, monitor.width, PANEL_SIDE_MARGIN)'));
+        assertTrue(island.includes('const w = this._expandedWidth();'));
+    },
+
     'Panel limita a altura disponível e torna notificações roláveis'() {
         const panel = source('components/Panel.js');
         const css = source('stylesheet.css');
@@ -94,6 +101,22 @@ export const tests = {
         assertTrue(!swap.includes('TIMING.fade'));
     },
 
+    'animações de tamanho ignoram callbacks obsoletos'() {
+        const island = source('island.js');
+        assertTrue(island.includes('_sizeAnimationId'));
+        assertTrue(island.includes('animationId === this._sizeAnimationId'));
+    },
+
+    'troca de camadas cancela somente suas propriedades'() {
+        const island = source('island.js');
+        const start = island.indexOf('_swapLayers(show)');
+        const end = island.indexOf('\n    }', start);
+        const swap = island.slice(start, end);
+        assertTrue(swap.includes("remove_transition('translation-y')"));
+        assertTrue(swap.includes("remove_transition('opacity')"));
+        assertFalse(swap.includes('remove_all_transitions()'));
+    },
+
     'ilha usa uma única superfície visual durante a expansão'() {
         const island = source('island.js');
         assertTrue(island.includes('this.set_style(surfaceStyle)'));
@@ -107,5 +130,31 @@ export const tests = {
         assertTrue(island.includes("remove_style_class_name('motion-reduced')"));
         assertTrue(island.includes("add_style_class_name('motion-reduced')"));
         assertFalse(island.includes('toggle_style_class_name('));
+    },
+
+    'mudança de monitor recalcula posição e strut'() {
+        const extension = source('extension.js');
+        assertTrue(extension.includes("connect('monitors-changed'"));
+        const start = extension.indexOf("connect('monitors-changed'");
+        const end = extension.indexOf('\n            });', start);
+        const handler = extension.slice(start, end);
+        assertTrue(handler.includes('this._updateStrut()'));
+        assertTrue(handler.includes('this._position()'));
+    },
+
+    'mostrar a barra superior libera o strut'() {
+        const extension = source('extension.js');
+        const start = extension.indexOf('_showTopBar()');
+        const end = extension.indexOf('\n    _position()', start);
+        const handler = extension.slice(start, end);
+        assertTrue(handler.includes('this._updateStrut()'));
+    },
+
+    'hover do Notch é aplicado à superfície raiz'() {
+        const island = source('island.js');
+        assertTrue(island.includes("notify::hover"));
+        assertTrue(island.includes('rootHover'));
+        assertTrue(island.includes('displayedSurface'));
+        assertTrue(island.includes('appearance-notch'));
     },
 };

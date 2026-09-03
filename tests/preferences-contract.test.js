@@ -58,6 +58,49 @@ export const tests = {
             assertIncludes(text, `'${key}'`);
     },
 
+    'restaurar padrões percorre todas as chaves do schema'() {
+        const text = prefs();
+        assertIncludes(text, 'function resetSettings(settings)');
+        assertIncludes(text, 'settings.settings_schema.list_keys()');
+        assertIncludes(text, 'settings.reset(key)');
+        assertIncludes(text, "label: 'Restaurar padrões'");
+        const keys = [...schema().matchAll(/<key name="([^"]+)"/g)]
+            .map(match => match[1]);
+        assertTrue(keys.length > 0);
+        assertTrue(text.includes('for (const key of settings.settings_schema.list_keys())'));
+    },
+
+    'preferências protegem valores inválidos e sincronizam combos'() {
+        const text = prefs();
+        assertIncludes(text, 'safeInt(settings');
+        assertIncludes(text, 'safeString(settings');
+        assertIncludes(text, 'safeStrv(settings');
+        assertIncludes(text, 'validColor(settings');
+        assertIncludes(text, "settings.connect('changed::position'");
+        assertIncludes(text, "settings.connect('changed::appearance-mode'");
+        assertIncludes(text, 'safeSet(() =>');
+    },
+
+    'controles interativos têm nome, dica e foco de teclado'() {
+        const panel = source('components/Panel.js');
+        const island = source('island.js');
+        const pill = source('components/Pill.js');
+        const css = source('stylesheet.css');
+        for (const value of [
+            'accessible_name: def.label',
+            'tooltip_text: `Alternar ${def.label}`',
+            "this._volumeSlider.accessible_name = 'Volume'",
+            "this._brightnessSlider.accessible_name = 'Brilho'",
+            "accessible_name: 'Limpar notificações'",
+        ])
+            assertIncludes(panel, value);
+        assertIncludes(island, 'tooltip_text: accessibleName');
+        assertIncludes(island, 'bannerPrevBtn.can_focus = true');
+        assertIncludes(pill, "accessible_name: 'Abrir painel da Dynamic Island'");
+        assertIncludes(css, '.island-toggle:focus');
+        assertIncludes(css, '.slider:focus');
+    },
+
     'runtime aplica tema, escala e ordem configuráveis'() {
         const island = source('island.js');
         const panel = source('components/Panel.js');

@@ -31,6 +31,8 @@ class Pill extends St.Widget {
             layout_manager: new Clutter.BinLayout(),
             reactive: true,
             can_focus: true,
+            accessible_name: 'Abrir painel da Dynamic Island',
+            tooltip_text: 'Abrir painel',
             track_hover: true,
             x_align: Clutter.ActorAlign.FILL,
             y_align: Clutter.ActorAlign.FILL,
@@ -150,6 +152,7 @@ class Pill extends St.Widget {
             can_focus: true,
             accessible_name: 'Dispensar',
             visible: false,
+            tooltip_text: 'Dispensar notificação',
             y_align: Clutter.ActorAlign.CENTER,
         });
         this._pillDismissBtn.connect('clicked', () => {

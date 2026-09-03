@@ -49,6 +49,11 @@ class FakeNotif extends FakeEmitter {
 }
 
 class FakeSource extends FakeEmitter {
+    constructor(props = {}) {
+        super();
+        Object.assign(this, props);
+    }
+
     fireNotification(notif) {
         this.emit('notification-added', notif);
     }
@@ -226,4 +231,116 @@ export const tests = {
         assertEqual(addedCount, 1);
         assertEqual(mgr.notifications.length, 1);
     },
+
+    'sinal duplicado para o mesmo objeto não duplica histórico nem grupo'() {
+        const mgr = new NotificationManager();
+        const tray = new FakeTray();
+        const source = new FakeSource({title: 'Chat'});
+        tray.addSource(source);
+        mgr.start(tray);
+        const notif = new FakeNotif({title: 'mesma'});
+
+        source.fireNotification(notif);
+        source.fireNotification(notif);
+
+        assertEqual(mgr.notifications, [notif]);
+        assertEqual(mgr.notificationGroups.length, 1);
+        assertEqual(mgr.notificationGroups[0].count, 1);
+    },
+
+    'agrupa por fonte, conta e mantém a ordem das fontes mais recentes'() {
+        const mgr = new NotificationManager();
+        const tray = new FakeTray();
+        const chat = new FakeSource({title: 'Chat'});
+        const mail = new FakeSource({title: 'Mail'});
+        tray.addSource(chat);
+        tray.addSource(mail);
+        mgr.start(tray);
+
+        const c1 = new FakeNotif({title: 'c1', source: chat});
+        const m1 = new FakeNotif({title: 'm1', source: mail});
+        const c2 = new FakeNotif({title: 'c2', source: chat});
+        sourceFire(chat, c1);
+        sourceFire(mail, m1);
+        sourceFire(chat, c2);
+
+        assertEqual(mgr.notifications.map(n => n.title), ['c2', 'm1', 'c1']);
+        assertEqual(mgr.notificationGroups.map(g => g.source.title), ['Chat', 'Mail']);
+        assertEqual(mgr.notificationGroups[0].count, 2);
+        assertEqual(mgr.notificationGroups[0].latest, c2);
+        assertEqual(mgr.notificationGroups[0].notifications, [c2, c1]);
+        assertEqual(mgr.notificationGroups[1].count, 1);
+    },
+
+    'atualização da mesma notificação emite updated sem criar duplicata'() {
+        const mgr = new NotificationManager();
+        const tray = new FakeTray();
+        const source = new FakeSource({title: 'Mail'});
+        tray.addSource(source);
+        mgr.start(tray);
+        const notif = new FakeNotif({source, title: 'antigo'});
+        let updatedCount = 0;
+        mgr.connect('updated', () => updatedCount += 1);
+        sourceFire(source, notif);
+
+        notif.title = 'novo';
+        notif.emit('updated');
+
+        assertEqual(updatedCount, 1);
+        assertEqual(mgr.notifications.length, 1);
+        assertEqual(mgr.getLatest().title, 'novo');
+        assertEqual(mgr.notificationGroups[0].count, 1);
+    },
+
+    'notificações sem fonte não são agrupadas umas com as outras'() {
+        const mgr = new NotificationManager();
+        const tray = new FakeTray();
+        const source = new FakeSource();
+        tray.addSource(source);
+        mgr.start(tray);
+        sourceFire(source, new FakeNotif({title: 'a'}));
+        sourceFire(source, new FakeNotif({title: 'b'}));
+
+        assertEqual(mgr.notifications.length, 2);
+        assertEqual(mgr.notificationGroups.length, 2);
+        assertEqual(mgr.notificationGroups.every(g => g.count === 1), true);
+    },
+
+    'fontes distintas com o mesmo título formam um grupo compatível com app/fonte'() {
+        const mgr = new NotificationManager();
+        const tray = new FakeTray();
+        const first = new FakeSource({title: 'Messenger'});
+        const second = new FakeSource({title: 'Messenger'});
+        tray.addSource(first);
+        tray.addSource(second);
+        mgr.start(tray);
+        sourceFire(first, new FakeNotif({source: first, title: 'a'}));
+        sourceFire(second, new FakeNotif({source: second, title: 'b'}));
+
+        assertEqual(mgr.notificationGroups.length, 1);
+        assertEqual(mgr.notificationGroups[0].count, 2);
+    },
+
+    'destruir item decrementa o grupo e remove o grupo quando fica vazio'() {
+        const mgr = new NotificationManager();
+        const tray = new FakeTray();
+        const source = new FakeSource({title: 'Mail'});
+        tray.addSource(source);
+        mgr.start(tray);
+        const first = new FakeNotif({source, title: 'a'});
+        const second = new FakeNotif({source, title: 'b'});
+        sourceFire(source, first);
+        sourceFire(source, second);
+
+        first.destroy();
+        assertEqual(mgr.notificationGroups.length, 1);
+        assertEqual(mgr.notificationGroups[0].count, 1);
+        assertEqual(mgr.notificationGroups[0].latest, second);
+        second.destroy();
+        assertEqual(mgr.notificationGroups.length, 0);
+    },
 };
+
+function sourceFire(source, notif) {
+    source.fireNotification(notif);
+}
