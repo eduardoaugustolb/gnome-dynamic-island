@@ -158,6 +158,13 @@ class Island extends St.Widget {
         this._panel.applyAccent();
         this._applyTheme();
         this._syncMotionPreference();
+        this.connect('notify::hover', () => {
+            // No notch, a Pill ocupa só a largura natural e fica transparente;
+            // o feedback de hover precisa ser aplicado à superfície raiz inteira.
+            if (isNotchMode(this._settings.get_string('appearance-mode')) &&
+                this._state === 'collapsed')
+                this._applyShape();
+        });
 
         St.ThemeContext.get_for_stage(global.stage).connectObject(
             'changed', () => this.refreshTheme(), this);
@@ -1353,12 +1360,16 @@ class Island extends St.Widget {
             ` font-size: ${13 * scale / 100}px; font-family: ${
                 this._settings.get_string('font-family')};`;
         const surface = this._state === 'collapsed' ? pillBg : panelBg;
+        const rootHover = notch && this._state === 'collapsed' && this.hover;
+        const displayedSurface = rootHover ? this._lighten(pillBg, 12) : surface;
         const radius = this._state === 'collapsed'
             ? (notch ? `0 0 ${Math.floor(h / 2)}px ${Math.floor(h / 2)}px` :
                 `${Math.floor(h / 2)}px`)
             : (notch ? `0 0 ${r}px ${r}px` : `${r}px`);
         const surfaceStyle = `border-radius: ${radius}; ` +
-            `background-color: ${surface}; ${common}`;
+            `background-color: ${displayedSurface}; ` +
+            'transition-property: background-color; transition-duration: 180ms; ' +
+            common;
         this.set_style(surfaceStyle);
         const baseStyle = `border-radius: ${Math.floor(h / 2)}px; ` +
             'background-color: transparent; border-color: transparent; ' +
