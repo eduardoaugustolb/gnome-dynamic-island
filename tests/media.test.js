@@ -1,4 +1,7 @@
-import {MediaWatcher, _unwrap, _extractMeta} from '../modules/media.js';
+import {
+    MediaWatcher, _unwrap, _extractMeta,
+    _normalizeDuration, _normalizePosition, _progress,
+} from '../modules/media.js';
 import {
     assertEqual, assertTrue, assertFalse, assertUndefined,
 } from './lib/assert.js';
@@ -196,5 +199,51 @@ export const tests = {
         mw._recompute();
 
         assertEqual(mw.info.position, null);
+    },
+
+    'seleção entre players é determinística por nome do barramento'() {
+        const mw = new MediaWatcher();
+        mw._players.set('org.mpris.MediaPlayer2.Z',
+            {player: fakePlayer('Playing', {'xesam:title': 'Z'}), root: fakeRoot()});
+        mw._players.set('org.mpris.MediaPlayer2.A',
+            {player: fakePlayer('Playing', {'xesam:title': 'A'}), root: fakeRoot()});
+
+        mw._recompute();
+
+        assertEqual(mw.info.bus, 'org.mpris.MediaPlayer2.A');
+        assertEqual(mw.info.title, 'A');
+    },
+
+    'metadados incompletos ou inválidos usam defaults seguros'() {
+        const meta = _extractMeta({
+            'xesam:title': null,
+            'xesam:artist': [null, 'Artista'],
+            'mpris:length': -10,
+        });
+        assertEqual(meta.title, '');
+        assertEqual(meta.artist, ', Artista');
+        assertEqual(meta.album, '');
+        assertEqual(meta.length, 0);
+    },
+
+    'helpers de posição e duração rejeitam valores inválidos e limitam progresso'() {
+        assertEqual(_normalizeDuration(-1), 0);
+        assertEqual(_normalizeDuration('infinito'), 0);
+        assertEqual(_normalizePosition(-1, 100), null);
+        assertEqual(_normalizePosition(150, 100), 100);
+        assertEqual(_normalizePosition(undefined, 100), null);
+        assertEqual(_progress(150, 100), 1);
+        assertEqual(_progress(10, 0), null);
+    },
+
+    'callbacks tardios não reativam watcher parado'() {
+        const mw = new MediaWatcher();
+        mw._started = true;
+        mw.stop();
+        mw._players.set('org.mpris.MediaPlayer2.P',
+            {player: fakePlayer('Playing'), root: fakeRoot()});
+        mw._recompute();
+        assertFalse(mw.isActive());
+        assertFalse(mw.info.playing);
     },
 };
