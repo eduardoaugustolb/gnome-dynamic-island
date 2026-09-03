@@ -18,6 +18,7 @@ import {
     clampPillWidth,
     maxPanelHeight,
     panelTargetHeight,
+    expandedWidth,
 } from './core/layout.js';
 import {UiState} from './core/uiState.js';
 import {Banner} from './components/Banner.js';
@@ -28,6 +29,7 @@ import {isNotchMode} from './core/displayMode.js';
 
 const STARTUP_GRACE_MS = 3000;
 const PILL_MIN_WIDTH = 210;
+const PANEL_SIDE_MARGIN = 16;
 const SWIPE_THRESHOLD = 36;
 
 const AREA_ORDER = ['media', 'notifications', 'clock'];
@@ -92,6 +94,7 @@ class Island extends St.Widget {
         this._battery = null;
         this._started = false;
         this._revealing = false;
+        this._sizeAnimationId = 0;
         this._scrollAccum = 0;
         this._scrollAxis = null;
         this._scrollCooldownId = 0;
@@ -144,6 +147,7 @@ class Island extends St.Widget {
             notifQueue: this._notifQueue,
             getState: () => this._state,
             isResizing: () => this._revealing,
+            expandedWidth: () => this._expandedWidth(),
             maxHeight: () => this._maxHeight(),
             accentColor: () => this._accentColor(),
             resolveAppIcon: (id) => this._resolveAppIcon(id),
@@ -186,6 +190,11 @@ class Island extends St.Widget {
 
         this._notifs.connectObject('added',
             () => this._onNotificationAdded(this._notifs.getLatest()), this);
+        this._notifs.connectObject('updated',
+            () => {
+                if (this._state === 'panel')
+                    this._panel.refreshNotifsDebounced();
+            }, this);
         this._notifs.connectObject('removed',
             () => {
                 // Uma notificação pode ser destruída (pelo próprio app,
@@ -423,13 +432,20 @@ class Island extends St.Widget {
      * camada usa opacidade + um leve deslocamento vertical. */
 
     _animateSize(w, h, spring, onComplete = null) {
+        // Um callback de uma animação interrompida não pode liberar flags ou
+        // atualizar o estado depois de uma animação mais nova ter começado.
+        const animationId = ++this._sizeAnimationId;
+        const complete = onComplete ? () => {
+            if (animationId === this._sizeAnimationId)
+                onComplete();
+        } : null;
         this._animator.animate(this, {
             width: w,
             height: h,
         }, {
             duration: spring ? TIMING.expand : TIMING.collapse,
             mode: spring ? MODES.enter : MODES.exit,
-            onComplete,
+            onComplete: complete,
         });
     }
 
@@ -443,7 +459,8 @@ class Island extends St.Widget {
             // O tamanho do contêiner já faz a transição. Um crossfade aqui
             // cria um segundo movimento e expõe frames do painel piscando,
             // especialmente quando a abertura interrompe um recolhimento.
-            layer.remove_all_transitions();
+            layer.remove_transition('translation-y');
+            layer.remove_transition('opacity');
             layer.translation_y = 0;
             layer.opacity = 255;
             layer.visible = name === show;
@@ -464,6 +481,17 @@ class Island extends St.Widget {
         } catch (_) {
             return PILL_MIN_WIDTH;
         }
+    }
+
+    _expandedWidth() {
+        const configured = this._settings.get_int('expanded-width');
+        const monitor = Main.layoutManager.primaryMonitor;
+        if (!monitor?.width)
+            return configured;
+        // Mantém uma margem mínima dos dois lados, inclusive quando a
+        // preferência foi definida para um monitor maior e a sessão mudou
+        // para uma tela menor ou para uma escala fracionária.
+        return expandedWidth(configured, monitor.width, PANEL_SIDE_MARGIN);
     }
 
     _maxHeight() {
@@ -527,7 +555,7 @@ class Island extends St.Widget {
         // causar um engasgo na primeira vez. Bloqueado aqui.
         this._revealing = true;
         this._panel.updateContent();
-        const w = this._settings.get_int('expanded-width');
+        const w = this._expandedWidth();
         this._panel.visible = true;
         // Mede a página ativa já ciente da largura alvo. Cada área recebe
         // só a altura de que precisa; notificações continuam limitadas e
@@ -551,7 +579,7 @@ class Island extends St.Widget {
     _refit() {
         if (this._state !== 'panel' || this._revealing)
             return;
-        const w = this._settings.get_int('expanded-width');
+        const w = this._expandedWidth();
         this._panel.fitPages(w);
         let target;
         try {
@@ -724,7 +752,8 @@ class Island extends St.Widget {
 
     /* Chamado pelo keybinding global (Super+Shift+Space, ver
      * extension.js) — o único caminho de teclado pra play/pause agora,
-     * já que os botões da UI ficaram com can_focus:false de propósito. */
+     *; os controles do painel permanecem navegáveis por foco quando o
+     * usuário já entrou na superfície. */
     toggleMediaPlayPause() {
         this._media.playPause();
     }
@@ -744,7 +773,7 @@ class Island extends St.Widget {
         this._bannerKind = 'media';
         this._showBanner({
             child,
-            width: this._settings.get_int('expanded-width'),
+            width: this._expandedWidth(),
             minH: 96,
             maxH: 220,
             duration: this._settings.get_int('media-banner-duration'),
@@ -965,7 +994,7 @@ class Island extends St.Widget {
         const bannerPrevBtn = this._makeIconButton(
             'media-skip-backward-symbolic', 'Anterior', 18,
             (e) => this._consumeBannerClick(() => this._media.previous(), e));
-        bannerPrevBtn.can_focus = false;
+        bannerPrevBtn.can_focus = true;
         controls.add_child(bannerPrevBtn);
         const bannerPlayBtn = this._makeIconButton(
             info.playing
@@ -974,12 +1003,12 @@ class Island extends St.Widget {
             'Reproduzir/Pausar', 22,
             (e) => this._consumeBannerClick(() => this._media.playPause(), e));
         bannerPlayBtn.style_class += ' island-play-button';
-        bannerPlayBtn.can_focus = false;
+        bannerPlayBtn.can_focus = true;
         controls.add_child(bannerPlayBtn);
         const bannerNextBtn = this._makeIconButton(
             'media-skip-forward-symbolic', 'Próxima', 18,
             (e) => this._consumeBannerClick(() => this._media.next(), e));
-        bannerNextBtn.can_focus = false;
+        bannerNextBtn.can_focus = true;
         controls.add_child(bannerNextBtn);
 
         box.add_child(art);
@@ -993,8 +1022,9 @@ class Island extends St.Widget {
             style_class: 'island-icon-button',
             child: ownIcon(iconName, iconSize),
             reactive: true,
-            can_focus: false,
+            can_focus: true,
             accessible_name: accessibleName,
+            tooltip_text: accessibleName,
         });
         button.connect('clicked', callback);
         return button;
@@ -1104,8 +1134,8 @@ class Island extends St.Widget {
         } catch (_) {
             natW = 320;
         }
-        const cap = Math.min(this._settings.get_int('expanded-width'), 440);
-        return clamp(natW, 240, cap);
+        const cap = Math.min(this._expandedWidth(), 440);
+        return clamp(natW, Math.min(240, cap), cap);
     }
 
     _isDnd() {
@@ -1179,7 +1209,8 @@ class Island extends St.Widget {
             reactive: true,
             can_focus: true,
             y_align: Clutter.ActorAlign.CENTER,
-            accessible_name: 'Dispensar',
+            accessible_name: 'Dispensar notificação',
+            tooltip_text: 'Dispensar notificação',
         });
         dismiss.connect('clicked', () => {
             this._showCollapsed();
@@ -1396,7 +1427,7 @@ class Island extends St.Widget {
                 this._panel.updateContent();
         } else if (key === 'expanded-width') {
             if (this._state === 'panel') {
-                const w = this._settings.get_int('expanded-width');
+                const w = this._expandedWidth();
                 this._panel.fitPages(w);
                 this._panel.positionTrack(this._panel.pageIndex, false);
                 try {
