@@ -8,15 +8,74 @@ import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/ex
 const POSITIONS = ['center', 'left', 'right'];
 const APPEARANCE_MODES = ['pill', 'notch'];
 const APPEARANCE_LABELS = ['Pill', 'Notch'];
+const DEFAULT_COLORS = {
+    'accent-color': '#0A84FF',
+    'border-color': '#FFFFFF',
+    'pill-background': '#141416',
+    'panel-background': '#18181C',
+};
+
+/* GSettings normally validates values written through its API, but values
+ * from an older schema or another settings editor can still be outside the
+ * range expected by a widget. Keep the preferences page usable in that case
+ * and let the next user change repair the setting. */
+function safeInt(settings, key, fallback, lower, upper) {
+    let value;
+    try {
+        value = settings.get_int(key);
+    } catch (_) {
+        value = fallback;
+    }
+    if (!Number.isFinite(value))
+        value = fallback;
+    return Math.min(upper, Math.max(lower, value));
+}
+
+function safeString(settings, key, fallback) {
+    try {
+        const value = settings.get_string(key);
+        return typeof value === 'string' && value.length > 0 ? value : fallback;
+    } catch (_) {
+        return fallback;
+    }
+}
+
+function safeStrv(settings, key, fallback = []) {
+    try {
+        const value = settings.get_strv(key);
+        return Array.isArray(value) ? value.filter(v => typeof v === 'string') : fallback;
+    } catch (_) {
+        return fallback;
+    }
+}
+
+function validColor(settings, key) {
+    const value = safeString(settings, key, DEFAULT_COLORS[key]);
+    return /^#[0-9a-f]{6}$/i.test(value) ? value : DEFAULT_COLORS[key];
+}
 
 function hexToRgba(hex) {
-    const v = parseInt(hex.slice(1), 16);
+    const value = /^#[0-9a-f]{6}$/i.test(hex) ? hex : '#000000';
+    const v = parseInt(value.slice(1), 16);
     const rgba = new Gdk.RGBA();
     rgba.red = ((v >> 16) & 255) / 255;
     rgba.green = ((v >> 8) & 255) / 255;
     rgba.blue = (v & 255) / 255;
     rgba.alpha = 1;
     return rgba;
+}
+
+function safeSet(setter) {
+    try {
+        setter();
+    } catch (_) {
+        // A concurrent settings/schema change must not tear down the page.
+    }
+}
+
+function resetSettings(settings) {
+    for (const key of settings.settings_schema.list_keys())
+        safeSet(() => settings.reset(key));
 }
 
 function rgbaToHex(rgba) {
@@ -34,46 +93,50 @@ function spinRow(title, key, settings, {lower, upper, step}) {
         upper,
         step_increment: step,
     }));
-    row.set_value(settings.get_int(key));
-    row.connect('notify::value', r =>
-        settings.set_int(key, Math.round(r.value)));
+    row.set_value(safeInt(settings, key, lower, lower, upper));
+    row.connect('notify::value', r => safeSet(() =>
+        settings.set_int(key, Math.round(Math.min(upper, Math.max(lower, r.value))))));
     return row;
 }
 
 function switchRow(title, subtitle, key, settings) {
     const row = new Adw.SwitchRow({title, subtitle});
-    settings.bind(key, row, 'active', Gio.SettingsBindFlags.DEFAULT);
+    row.set_tooltip_text(subtitle);
+    safeSet(() => settings.bind(key, row, 'active', Gio.SettingsBindFlags.DEFAULT));
     return row;
 }
 
 function colorRow(title, subtitle, key, settings) {
     const row = new Adw.ActionRow({title, subtitle});
     const button = new Gtk.ColorButton({
-        rgba: hexToRgba(settings.get_string(key)),
+        rgba: hexToRgba(validColor(settings, key)),
+        tooltip_text: subtitle,
     });
-    button.connect('color-set', btn =>
-        settings.set_string(key, rgbaToHex(btn.rgba)));
+    button.set_accessible_name(title);
+    button.connect('color-set', btn => safeSet(() =>
+        settings.set_string(key, rgbaToHex(btn.rgba))));
     row.add_suffix(button);
     row.set_activatable_widget(button);
     return row;
 }
 
 function stringRow(title, subtitle, key, settings) {
-    const row = new Adw.EntryRow({title, text: settings.get_string(key)});
+    const row = new Adw.EntryRow({title, text: safeString(settings, key, '')});
     row.set_tooltip_text(subtitle);
-    row.connect('changed', entry => settings.set_string(key, entry.text));
+    row.connect('changed', entry => safeSet(() =>
+        settings.set_string(key, entry.text)));
     return row;
 }
 
 function strvRow(title, subtitle, key, settings) {
     const row = new Adw.EntryRow({
         title,
-        text: settings.get_strv(key).join(', '),
+        text: safeStrv(settings, key).join(', '),
     });
     row.set_tooltip_text(subtitle);
     row.connect('changed', entry => {
         const values = entry.text.split(',').map(value => value.trim()).filter(Boolean);
-        settings.set_strv(key, values);
+        safeSet(() => settings.set_strv(key, values));
     });
     return row;
 }
@@ -94,10 +157,18 @@ export default class DynamicIslandPreferences extends ExtensionPreferences {
             subtitle: 'Onde a ilha fica ancorada na borda superior',
             model: new Gtk.StringList({strings: POSITIONS}),
         });
-        position.selected = Math.max(0, POSITIONS.indexOf(
-            settings.get_string('position')));
-        position.connect('notify::selected', row =>
-            settings.set_string('position', POSITIONS[row.selected]));
+        const positionIndex = POSITIONS.indexOf(
+            safeString(settings, 'position', 'center'));
+        position.selected = positionIndex >= 0 ? positionIndex : 0;
+        position.connect('notify::selected', row => {
+            const value = POSITIONS[row.selected] ?? 'center';
+            safeSet(() => settings.set_string('position', value));
+        });
+        settings.connect('changed::position', () => {
+            const index = POSITIONS.indexOf(
+                safeString(settings, 'position', 'center'));
+            position.selected = index >= 0 ? index : 0;
+        });
         general.add(position);
 
         const appearance = new Adw.ComboRow({
@@ -105,12 +176,13 @@ export default class DynamicIslandPreferences extends ExtensionPreferences {
             subtitle: 'Escolha entre a pill flutuante e o notch conectado ao topo',
             model: new Gtk.StringList({strings: APPEARANCE_LABELS}),
         });
-        appearance.selected = Math.max(0, APPEARANCE_MODES.indexOf(
-            settings.get_string('appearance-mode')));
+        const appearanceIndex = APPEARANCE_MODES.indexOf(
+            safeString(settings, 'appearance-mode', 'pill'));
+        appearance.selected = appearanceIndex >= 0 ? appearanceIndex : 0;
         appearance.connect('notify::selected', row => {
             const mode = APPEARANCE_MODES[row.selected] ?? 'pill';
-            if (settings.get_string('appearance-mode') !== mode)
-                settings.set_string('appearance-mode', mode);
+            if (safeString(settings, 'appearance-mode', 'pill') !== mode)
+                safeSet(() => settings.set_string('appearance-mode', mode));
         });
         settings.connect('changed::appearance-mode', () => {
             const selected = APPEARANCE_MODES.indexOf(
@@ -203,5 +275,22 @@ export default class DynamicIslandPreferences extends ExtensionPreferences {
         ])
             controls.add(switchRow(title, `Mostrar ${title.toLowerCase()}`,
                 key, settings));
+
+        const resetGroup = new Adw.PreferencesGroup({title: 'Configuração'});
+        const resetRow = new Adw.ActionRow({
+            title: 'Restaurar padrões',
+            subtitle: 'Volta todas as opções desta extensão aos valores originais',
+        });
+        const resetButton = new Gtk.Button({
+            label: 'Restaurar padrões',
+            valign: Gtk.Align.CENTER,
+            tooltip_text: 'Restaurar todas as opções aos valores originais',
+        });
+        resetButton.set_accessible_name('Restaurar padrões');
+        resetButton.connect('clicked', () => resetSettings(settings));
+        resetRow.add_suffix(resetButton);
+        resetRow.set_activatable_widget(resetButton);
+        resetGroup.add(resetRow);
+        page.add(resetGroup);
     }
 }

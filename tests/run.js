@@ -6,11 +6,11 @@
  *
  *   gjs -m tests/run.js
  *
- * Só cobre os módulos que não dependem de resource:///org/gnome/shell
- * nem de Clutter/St (media.js, notifications.js, notifQueue.js) — esses
- * só existem dentro de um gnome-shell rodando de verdade, então
- * island.js/extension.js/controls.js não dá pra carregar aqui (ver
- * README de testes mais abaixo neste arquivo).
+ * Cobre módulos independentes do Shell, a geometria responsiva e
+ * contratos de integração para os componentes que dependem de
+ * resource:///org/gnome/shell ou de Clutter/St. A execução de actors reais
+ * continua sendo responsabilidade do GNOME Shell, mas toda a lógica
+ * determinística deve permanecer testável aqui.
  */
 import System from 'system';
 
